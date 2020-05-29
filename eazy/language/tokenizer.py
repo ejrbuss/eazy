@@ -1,118 +1,103 @@
 import re
+from . import node
 
-def value_id(match):
-    return match
+def skip(meta, match):
+    return None
 
-def value_integer_for_base(base):
-    def value_integer(match):
+def create_doc(meta, match):
+    return [ meta, node.ntype_doc, match.replace('---', '') ]
+
+def assign_ntype(ntype):
+    return lambda meta, match : [ meta, ntype, match ]
+
+def create_int(base):
+    def create_int(meta, match):
         if base != 10:
             match = match[2:]
-        return int(match, base=base)
-    return value_integer
+        return [ meta, node.ntype_number, int(match.replace('_', ''), base=base) ]
+    return create_int
 
-def value_float(match):
-    return float(match)
+def create_float(meta, match):
+    return [ meta, node.ntype_number, float(match.replace('_', '')) ]
 
-def value_string(match):
-    return match[1:-1].encode("utf-8").decode("unicode_escape")
+def escape(quotes):
+    n = len(quotes)
+    return lambda meta, match : [ meta, node.ntype_string, match[n:-n]
+        .encode("utf-8")
+        .decode("unicode_escape")
+    ]
 
-def value_string_raw(match):
-    return match[1:-1].replace("\\'", "'").replace("\\\\", "\\")
+def raw(quotes):
+    n = len(quotes)
+    return lambda meta, match : [ meta, node.ntype_string, match[n:-n]
+        .replace('\\\'', '\'')
+        .replace('\\"', '"')
+        .replace('\\\\', '\\')
+    ]
+
+# Token           # Pattern                                                                 # Action
+token_doc         = [ re.compile(r'---(.|\s)*?---'),                                        create_doc ]
+token_comment     = [ re.compile(r'--.*'),                                                  skip ]
+token_terminator  = [ re.compile(r'(\n)|;'),                                                assign_ntype(node.ntype_terminator) ]
+token_whitespace  = [ re.compile(r'\s+'),                                                   skip ]
+token_punctuation = [ re.compile(r':|,|\(|\)|\[|\]|\{|\}'),                                 assign_ntype(node.ntype_token) ]
+token_operator    = [ re.compile(r'==|/=|=>|->|=|<=|<|>=|>|\+|\-|\*|\/|\^|\.\.\.|\.\.|\.'), assign_ntype(node.ntype_token) ]
+token_binary      = [ re.compile(r'0[bB][01][01_]*'),                                       create_int(base=0b10) ]
+token_octal       = [ re.compile(r'0[oO][0-7][0-7_]*'),                                     create_int(base=0o10) ]
+token_hexidecimal = [ re.compile(r'0[xX][\da-fA-F][\da-fA-F_]*'),                           create_int(base=0x10) ]
+token_float       = [ re.compile(r'(\d[\d_]*)?\.\d[\d_]*([eE][-+]?\d[\d_]*)?'),             create_float ]
+token_exp         = [ re.compile(r'\d[\d_][eE][-+]?\d[\d_]*'),                              create_float ]
+token_decimal     = [ re.compile(r'\d[\d_]*'),                                              create_int(base=10) ]
+token_mstring     = [ re.compile(r'"""(.|\s)*?"""'),                                        escape('"""') ]
+token_string      = [ re.compile(r'"(\\.|[^\\"])*?"'),                                      escape('"') ]
+token_raw_mstring = [ re.compile(r'\'\'\'(.|\s)*?\'\'\''),                                  raw("'''") ]
+token_raw_string  = [ re.compile(r'\'(\\.|[^\\\'])*?\''),                                   raw("'") ]
+token_ident       = [ re.compile(r'(?![0-9])\w+'),                                          assign_ntype(node.ntype_ident) ]
 
 token_definitions = [
-    {
-        "type": "comment_singleline",
-        "pattern": re.compile(r'^(--.*)'),
-        "skip": True,
-    },
-    {
-        "type": "comment_multiline",
-        "pattern": re.compile(r'---(.|\s)*?---'),
-        "skip": True,
-    },
-    {
-        "type": "whitespace",
-        "pattern": re.compile(r'\s+'),
-        "skip": True,
-    },
-    {
-        "type": "punctuation",
-        "pattern": re.compile(r',|;|\(|\)|\[|\]|\{|\}'),
-        "value": value_id,
-    },
-    {
-        "type": "operator",
-        "pattern": re.compile(r'==|/=|=|<=|<|>=|>|->|\+|\-|\*|\/|\^|\.\.\.|\.\.|\.'),
-        "value": value_id,
-    },
-    {
-        "type": "reserved_keyword",
-        "pattern": re.compile(r'if|then|else|do|while|for|in|match|count|merge|copy|new|class|not|or|and|import|export|return|try|catch|throw|print|input|val|var|type'),
-        "value": value_id,
-    },
-    {
-        "type": "reserved_type",
-        "pattern": re.compile(r'True|False|Nothing|Boolean|Number|String|List|Map|Function'),
-        "value": value_id,
-    },
-    # TODO _ in numeric literals
-    {
-        "type": "literal_integer_bin",
-        "pattern": re.compile('0[bB][01]+'),
-        "value": value_integer_for_base(0b10),
-    },
-    {
-        "type": "literal_integer_oct",
-        "pattern": re.compile(r'0[oO][0-7]+'),
-        "value": value_integer_for_base(0o10),
-    },
-    {
-        "type": "literal_integer_dec",
-        "pattern": re.compile(r'\d+'),
-        "value": value_integer_for_base(10),
-    },
-    {
-        "type": "literal_integer_hex",
-        "pattern": re.compile(r'0[xX][\da-fA-F]+'),
-        "value": value_integer_for_base(0x10),
-    },
-    {
-        "type": "literal_float",
-        "pattern": re.compile(r'\d*\.?\d+([eE][-+]?\d+)?'),
-        "value": value_float,
-    },
-    {
-        "type": "literal_string",
-        "pattern": re.compile(r'"(\\.|[^\\"])*"'),
-        "value": value_string,
-    },
-    {
-        "type": "literal_string_raw",
-        "pattern": re.compile(r'\'(\\.|[^\'\\])*\''),
-        "value": value_string_raw,
-    },
-    {
-        "type": "identifier",
-        "pattern": re.compile(r'[a-zA-Z_][\w?]*'),
-        "value": value_id,
-    },
+    token_doc,
+    token_comment,
+    token_terminator,
+    token_whitespace,
+    token_punctuation,
+    token_operator,
+    token_binary,
+    token_octal,
+    token_hexidecimal,
+    token_float,
+    token_exp,
+    token_decimal,
+    token_mstring,
+    token_string,
+    token_raw_mstring,
+    token_raw_string,
+    token_ident,
 ]
 
 def tokenize(source):
     tokens = []
-    while source:
-        for token_definition in token_definitions:
-            match = re.match(token_definition['pattern'], source)
+    position = 0
+    while position < len(source):
+        for (pattern, action) in token_definitions:
+            match = re.match(pattern, source[position:])
             if match:
                 match = match.group(0)
-                source = source[len(match):]
-                if "skip" not in token_definition:
-                    tokens.append({
-                        "type": token_definition["type"],
-                        "value": token_definition["value"](match)
-                    })
+                meta = {
+                    "source": source,
+                    "position": position,
+                    "match": match,
+                }
+                token = action(meta, match)
+                if token:
+                    tokens.append(token)
+                position += len(match)
                 break
         else:
             # TODO better syntax errors
-            raise SyntaxError("> " + source)
+            # raise errors.token_error(source, position)
+            print(tokens)
+            raise SyntaxError("tokenizing error > " + repr(source[position:]))
+
+    # Append terminator
+    tokens.append(assign_ntype(node.ntype_terminator)(None, "\n"))
     return tokens

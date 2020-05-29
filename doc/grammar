@@ -1,0 +1,159 @@
+-- Notation
+-- --------
+-- words        - are nonterminals
+-- <types>      - are token types
+-- "values"     - are token values
+-- { words }    - are repeated any number of times
+-- [ words ]    - are optional
+-- ( word )     - groups operations
+-- ^            - are an error if they fail to parse after this point
+-- word | word  - are alternatives
+-- rule = word  - is a rule
+
+-- Correctness
+-- -----------
+-- assignment is outlawed by the grammar from being in expression position
+--
+-- path assignment, such as x[0] = 4 is allowed in the grammar but is disallowed
+-- by static analysis
+--
+-- patterns are much stricter than atoms, for instance map keys cannot be lists
+-- or maps, however the grammar is permissive, instead these are disallowed by
+-- static analysis
+--
+-- Catch that classes only allow for one case in 
+
+module 
+    = statements
+
+statements 
+    = { statement <termiantor> }
+
+statement
+    = "var" ^ pattern "=" expression
+    | <ident> "=" ^ expression
+    | "return" ^ expression [ "if" ^ expression ]
+    | expression
+
+patterns
+    = [ pattern ] { "," pattern } [ "," ]
+
+pattern
+    = list
+    | map
+    | atom
+
+atom
+    | [ "..." ] <ident>
+    | <string>
+    | <number>
+
+list
+    = "List" "[" ^ expressions "]"
+
+map
+    = "Map" "[" ^ pairs "]"
+
+expressions 
+    = [ expression ] { "," expression } [ "," ]
+
+pairs 
+    = [ pair ] { "," pair } [ "," ]
+  
+pair
+    = <ident> [ ":" expression ]
+    | "[" expression "]" ":" expression
+
+block
+    = "{" statements "}"
+
+function 
+    = "Function" "{" patterns "->" ^ statements "}"
+    | "Function" "{" cases "}"
+    | "Function" "block
+
+generator
+    = "Generator" ^ "{" patterns "->" statements "}"
+
+cases 
+    = case { "," case } [ "," ]
+
+case
+    = patterns [ "if" ^ expression ] "=>" ^ expression
+
+expression 
+    = expression1 { "or" ^ expression1 }
+
+expression1
+    = expression2 { "and" ^ expression2 }
+
+expression2
+    = expression3  { ( "/=" | "==" | "is" | "<" | "<=" | ">" | ">=" | "in" )^ expression3 }
+
+expression3
+    = expression4 { ( "+" | "-" ) ^ expression5 }
+
+expression4
+    = expression4 { ( "*" | "/" ) ^ expression }
+
+expression4
+    = ( "not" | "+" | "-" ) ^ expression
+  | expression6 [ ( ".." | "^" ) expression ]
+
+expression5 =
+    | if_expression
+    | extend_expression
+    | do_expression
+    | while_expression
+    | match_expression
+    | for_expression
+    | class_expression
+    | try_expression
+    | throw_expression
+    | return_expresssion
+    | function
+    | generator
+    | list
+    | map
+    | [ "..." ] "(" ^ expression ")" { { path } call }
+    | [ "..." ] <ident> { { path } call }
+    | atom
+  
+if_expression
+    = "if" expression "then" block "else" if_expression
+    | "if" ^ expression "then" block [ "else" ^ block ]
+
+extend_expression
+    = "extend" ^ expression
+
+do_expression
+    = "do" ^ block
+
+while_expression
+    = "while" ^ expression "do" block
+
+match_expression
+    = "match" ^ expression "in" "{" cases "}"
+
+for_expression
+    = "for" ^ pattern "in" expression [ "if" ^ expression ] [ "while" expression ] "do" block
+
+class_expression
+    = "class" ^ function
+
+try_expression
+    = "try" ^ block "catch" block
+
+throw_expression
+    = "throw" ^ expression [ "if" ^ expression ]
+
+return_expresssion
+    = "return" ^ expression [ "if" ^ expression ]
+
+path
+    = "." <ident>
+    | "[" ".." expression "]"
+    | "[" expression [ ".." ] "]"
+
+call
+    = "(" expressions ")"
