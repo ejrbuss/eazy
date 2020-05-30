@@ -7,6 +7,14 @@ def must(node):
     assert node is not None
     return node
 
+def many(parse, stream):
+    parts = []
+    part = parse(stream)
+    while part:
+        parts.append(part)
+        part = parse_token(stream, value=",") and parse(stream)
+    return parts
+
 def merge_tokens(token1, token2):
     meta1, ntype1, value1 = token1
     meta2, ntype2, value2 = token2
@@ -64,16 +72,14 @@ def parse_token(stream, ntype=None, value=None):
 def parser(function):
     def wrapper(stream):
         checkpoint = stream["position"]
-        def rollback():
-            stream["position"] = checkpoint
-        value = function(stream, rollback)
+        value = function(stream)
         if not value:
-            rollback()
+            stream["position"] = checkpoint
         return value
     return wrapper
 
 @parser
-def parse_module(stream, rollback):
+def parse_module(stream):
     """
     module 
         = statements
@@ -84,7 +90,7 @@ def parse_module(stream, rollback):
     return [ None, node.ntype_module, *statements ]
 
 @parser
-def parse_statements(stream, rollback):
+def parse_statements(stream):
     """
     statements 
         = { statement <terminator> }
@@ -101,13 +107,29 @@ def parse_statements(stream, rollback):
     return statements
 
 @parser
-def parse_statement(stream, rollback):
+def parse_statement(stream):
     """
     statement
-        = [ <doc>]  "var" ^ pattern "=" expression
-        | <ident> "=" ^ expression
-        | "return" ^ expression [ "if" ^ expression ]
+        = declaration
+        | return_statement
+        | yield_statement
+        | extend_statement
+        | assignment
         | expression
+    """
+    return (parse_declaration(stream)
+        or parse_assignment(stream)
+        or parse_return_statement(stream)
+        or parse_yield_statement(stream)
+        or parse_extend_statement(stream)
+        or parse_expression(stream)
+    )
+
+@parser
+def parse_declaration(stream):
+    """
+    declaration
+        = [ <doc> ] "var" ^ pattern "=" expression
     """
     doc = parse_token(stream, ntype=node.ntype_doc)
     if parse_token(stream, value="var"):
@@ -115,37 +137,51 @@ def parse_statement(stream, rollback):
         must(parse_token(stream, value="="))
         expression = must(parse_expression(stream))
         return [ None, node.ntype_var, pattern, expression, doc ]
-    rollback()
+
+@parser
+def parse_return_statement(stream):
+    """
+    return_statement
+        = "return" ^ expression
+    """
+    if parse_token(stream, value="return"):
+        expression = must(parse_expression(stream))
+        return [ None, node.ntype_return, expression ]
+
+@parser
+def parse_yield_statement(stream):
+    """
+    yield_statement
+        = "yield" ^ expression
+    """
+    if parse_token(stream, value="yield"):
+        expression = must(parse_expression(stream))
+        return [ None, node.ntype_yield, expression ]
+
+@parser
+def parse_extend_statement(stream):
+    """
+    extend_statement
+        = "extend" ^ expression
+    """
+    if parse_token(stream, value="extend"):
+        expression = must(parse_expression(stream))
+        return [ None, node.ntype_extend, expression ]
+
+@parser
+def parse_assignment(stream):
+    """
+    assignment
+        = <ident> "=" ^ expression
+    """
     ident = parse_token(stream, ntype=node.ntype_ident)
     if ident:
         if parse_token(stream, value="="):
             expression = must(parse_expression(stream))
             return [ None, node.ntype_assign, ident, expression ]
-    rollback()
-    if parse_token(stream, value="return"):
-        expression = must(parse_expression(stream))
-        condition = None
-        if parse_token(stream, value="if"):
-            condition = must(parse_expression(stream))
-        return [ None, node.ntype_return, expression, condition ]
-    rollback()
-    return parse_expression(stream)
- 
-@parser
-def parse_patterns(stream, rollback):
-    """
-    patterns
-        = [ pattern ] { "," pattern } [ "," ]
-    """
-    patterns = []
-    pattern = parse_pattern(stream)
-    while pattern:
-        patterns.append(pattern)
-        pattern = parse_token(stream, value=",") and parse_pattern(stream)
-    return [ None, node.ntype_patterns, *patterns ]
 
 @parser
-def parse_pattern(stream, rollback):
+def parse_pattern(stream):
     """
     pattern
         = list
@@ -161,7 +197,7 @@ def parse_pattern(stream, rollback):
     return parse_atom(stream)
 
 @parser
-def parse_atom(stream, rollback):
+def parse_atom(stream):
     """
     atom
         | [ "..." ^ ] <ident>
@@ -177,7 +213,7 @@ def parse_atom(stream, rollback):
     )
 
 @parser
-def parse_list(stream, rollback):
+def parse_list(stream):
     if parse_token(stream, value="List"):
         if parse_token(stream, value="["):
             expressions = must(parse_expressions(stream))
@@ -185,7 +221,7 @@ def parse_list(stream, rollback):
             return [ None, node.ntype_list, *expressions ]
 
 @parser
-def parse_map(stream, rollback):
+def parse_map(stream):
     if parse_token(stream, value="Map"):
         if parse_token(stream, value="["):
             pairs = must(parse_pairs(stream))
@@ -193,33 +229,7 @@ def parse_map(stream, rollback):
             return [ None, node.ntype_map, *pairs ]
 
 @parser
-def parse_expressions(stream, rollback):
-    """
-    expressions 
-        = expression { "," expression } [ "," ]
-    """
-    expressions = []
-    expression = parse_expression(stream)
-    while expression:
-        expressions.append(expression)
-        expression = parse_token(stream, value=",") and parse_expression(stream)
-    return expressions
-
-@parser
-def parse_pairs(stream, rollback):
-    """
-    pairs 
-        = [ pair ] { "," pair } [ "," ]
-    """
-    pairs = []
-    pair = parse_pair(stream)
-    while pair:
-        pairs.append(pair)
-        pair = parse_token(stream, value=",") and parse_pair(stream)
-    return pairs
-
-@parser
-def parse_pair(stream, rollback):
+def parse_pair(stream):
     """
     pair
         = <ident> [ ":" ^ expression ]
@@ -239,7 +249,7 @@ def parse_pair(stream, rollback):
         return [ None, node.ntype_pair, key, value ]
 
 @parser
-def parse_block(stream, rollback):
+def parse_block(stream):
     """
     block
         = "{" statements "}"
@@ -250,94 +260,85 @@ def parse_block(stream, rollback):
             return [ None, node.ntype_block, *statements ]
 
 @parser
-def parse_function(stream, rollback):
+def parse_function(stream):
     """
-    function 
-        | "Function" "{" patterns "->" statements "}"
-        | "Function" "{" cases "}"
-        | "Function" block
+    function
+        = "Function" "{" ^ (cases | single_case | statemtns) "}"
     """
-    if parse_token(stream, value="Function"):
-        if parse_token(stream, value="{"):
-            patterns = parse_patterns(stream)
-            if patterns:
-                if parse_token(stream, value="->"):
-                    statements = must(parse_statements(stream))
-                    must(parse_token(stream, value="}"))
-                    return [ None, node.ntype_function, 
-                        [ None, node.ntype_case, patterns, None, 
-                            [ None, node.ntype_block, *statements ]
-                        ]
-                    ]
-    rollback()
-    if parse_token(stream, value="Function"):
-        if parse_token(stream, value="{"):
-            cases = parse_cases(stream)
-            # print('cases:\n', '\n'.join(node.print_node(n) for n in cases))
-            if parse_token(stream, value="}"):
-                return [ None, node.ntype_function, *cases ]
-    rollback()
-    if parse_token(stream, value="Function"):
-        block = must(parse_block(stream))
+    if parse_token(stream, value='Function') and parse_token(stream, value='{'):
+        cases = parse_cases(stream)
+        if cases:
+            must(parse_token(stream, value="}"))
+            return [ None, node.ntype_function, *cases ]
+        single = parse_single_case(stream)
+        if single:
+            must(parse_token(stream, value="}"))
+            return [ None, node.ntype_function, single ]
+        statements = must(parse_statements(stream))
+        must(parse_token(stream, value="}"))
         return [ None, node.ntype_function, 
-            [ None, node.ntype_case, None, None, block ]
+            [ None, node.ntype_case, 
+                None,
+                None,
+                [ None, node.ntype_block, *statements ],
+            ],
         ]
 
 @parser
-def parse_generator(stream, rollback):
+def parse_single_case(stream):
+    """
+    single_case
+        = patterns "->" ^ statements
+    """
+    patterns = parse_patterns(stream)
+    if patterns and parse_token(stream, value="->"):
+        statements = must(parse_statements(stream))
+        return [ None, node.ntype_case,
+            patterns,
+            None,
+            [ None, node.ntype_block, *statements ],
+        ]
+
+@parser
+def parse_generator(stream):
     """
     generator
-        = "Generator" ^ "{" patterns "->" statements "}"
+        = "Generator" ^ "{" [ single_case ] "}"
     """
     if parse_token(stream, value="Generator"):
         must(parse_token(stream, value="{"))
-        patterns = must(parse_patterns(stream))
-        must(parse_token(stream, value="->"))
-        statements = must(parse_statements(stream))
+        single_case = parse_single_case(stream)
         must(parse_token(stream, value="}"))
         return [ None, node.ntype_generator, 
-            [ None, node.ntype_case, patterns, None, 
-                [ None, node.ntype_block, *statements ]
-            ]
+            single_case or [ None, node.ntype_case,
+                None, 
+                None,
+                [ None, node.ntype_block ],
+            ],
         ]
-    
-@parser
-def parse_cases(stream, rollback):
-    """
-    cases 
-        = case { "," case } [ "," ]
-    """
-    cases = []
-    case = parse_case(stream)
-    while case:
-        cases.append(case)
-        case = parse_token(stream, value=",") and parse_case(stream)
-    return cases
 
 @parser
-def parse_case(stream, rollback):
+def parse_case(stream):
     """
     case
-        = patterns [ "if" ^ expression ] "=>" ^ expression
+        = patterns [ guard ] "=>" ^ expression
     """
     patterns = parse_patterns(stream)
     if patterns:
-        condition = None
-        if parse_token(stream, value="if"):
-            condition = must(parse_expression(stream))
+        guard = parse_guard(stream)
         if parse_token(stream, value="=>"):
             body = must(parse_expression(stream))
-            return [ None, node.ntype_case, patterns, condition, body ]
+            return [ None, node.ntype_case, patterns, guard, body ]
 
 @parser
-def parse_expression(stream, rollback):
+def parse_expression(stream):
     """
     expression 
         = expression1 { "or" ^ expression1 }
     """
 
     @parser
-    def parse_operation(stream, rollback):
+    def parse_operation(stream):
         return parse_token(stream, value="or")
 
     expression = parse_expression1(stream)
@@ -350,14 +351,14 @@ def parse_expression(stream, rollback):
         return expression
     
 @parser
-def parse_expression1(stream, rollback):
+def parse_expression1(stream):
     """
     expression1
         = expression2 { "and" ^ expression2 }
     """
 
     @parser
-    def parse_operation(stream, rollback):
+    def parse_operation(stream):
         return parse_token(stream, value="and")
 
     expression = parse_expression2(stream)
@@ -370,14 +371,14 @@ def parse_expression1(stream, rollback):
         return expression
 
 @parser
-def parse_expression2(stream, rollback):
+def parse_expression2(stream):
     """
     expression2
-        = expression3  { ( "/=" | "==" | "is" | "<" | "<=" | ">" | ">=" | "in" ) ^ expression3 }
+        = expression3  { ( "/=" | "==" | "is" "not" | "is" | "<" | "<=" | ">" | ">=" | "in" | "not" "in") ^ expression3 }
     """
     
     @parser
-    def parse_operation(stream, rollback):
+    def parse_operation(stream):
         operation = (parse_token(stream, value="/=")
             or parse_token(stream, value="==")
             or parse_token(stream, value="<")
@@ -388,18 +389,17 @@ def parse_expression2(stream, rollback):
         )
         if operation:
             return operation
-        notop = parse_token(stream, value="not")
-        if notop:
-            inop = parse_token(stream, value="in")
-            if inop:
-                return merge_tokens(notop, inop)
-        rollback()
         isop = parse_token(stream, value="is")
         if isop:
             notop = parse_token(stream, value="not")
             if notop:
                 return merge_tokens(isop, notop)
             return isop
+        notop = parse_token(stream, value="not")
+        if notop:
+            inop = parse_token(stream, value="in")
+            if inop:
+                return merge_tokens(notop, inop)
 
     expression = parse_expression3(stream)
     if expression:
@@ -411,14 +411,14 @@ def parse_expression2(stream, rollback):
         return expression
         
 @parser
-def parse_expression3(stream, rollback):
+def parse_expression3(stream):
     """
     expression3
         = expression4 { ( "+" | "-" ) ^ expression4 }
     """
 
     @parser
-    def parse_operation(stream, rollback):
+    def parse_operation(stream):
         return parse_token(stream, value="+") or parse_token(stream, value="-")
 
     expression = parse_expression4(stream)
@@ -431,14 +431,14 @@ def parse_expression3(stream, rollback):
         return expression
 
 @parser
-def parse_expression4(stream, rollback):
+def parse_expression4(stream):
     """
     expression4
         = expression5 { ( "*" | "/" ) ^ expression5 }
     """
 
     @parser
-    def parse_operation(stream, rollback):
+    def parse_operation(stream):
         return parse_token(stream, value="*") or parse_token(stream, value="/")
 
     expression = parse_expression5(stream)
@@ -451,7 +451,7 @@ def parse_expression4(stream, rollback):
         return expression
 
 @parser
-def parse_expression5(stream, rollback):
+def parse_expression5(stream):
     """
     expression5
         = ( "not" | "+" | "-" ) ^ expression
@@ -473,7 +473,7 @@ def parse_expression5(stream, rollback):
         return expression
     
 @parser
-def parse_expression6(stream, rollback):
+def parse_expression6(stream):
     """
     expression6 =
         | if_expression
@@ -485,57 +485,36 @@ def parse_expression6(stream, rollback):
         | class_expression
         | try_expression
         | throw_expression
-        | return_expresssion
+        | return_expression
+        | yield_expression
         | function
         | generator
         | list
         | map
-        | [ "..." ]  "(" ^ expression ")" { { path } call }
-        | [ "..." ] <ident> { { path } call }
-        | atom 
+        | expression7
     """
-    if_expression = parse_if_expression(stream)
-    if if_expression:
-        return if_expression
-    extend_expression = parse_extend_expression(stream)
-    if extend_expression:
-        return extend_expression
-    do_expression = parse_do_expression(stream)
-    if do_expression:
-        return do_expression
-    while_expression = parse_while_expression(stream)
-    if while_expression:
-        return while_expression
-    match_expression = parse_match_expression(stream)
-    if match_expression:
-        return match_expression
-    for_expression = parse_for_expression(stream)
-    if for_expression:
-        return for_expression
-    class_expression = parse_class_expression(stream)
-    if class_expression:
-        return class_expression
-    try_expression = parse_try_expression(stream)
-    if try_expression:
-        return try_expression
-    throw_expression = parse_throw_expression(stream)
-    if throw_expression:
-        return throw_expression
-    return_expression = parse_return_expression(stream)
-    if return_expression:
-        return return_expression
-    function = parse_function(stream)
-    if function:
-        return function
-    generator = parse_generator(stream)
-    if generator:
-        return generator
-    list_literal = parse_list(stream)
-    if list_literal:
-        return list_literal
-    map_literal = parse_map(stream)
-    if map_literal:
-        return map_literal
+    return (parse_if_expression(stream)
+        or parse_do_expression(stream) 
+        or parse_while_expression(stream) 
+        or parse_match_expression(stream) 
+        or parse_for_expression(stream) 
+        or parse_class_expression(stream) 
+        or parse_try_expression(stream) 
+        or parse_throw_expression(stream) 
+        or parse_function(stream) 
+        or parse_generator(stream) 
+        or parse_list(stream) 
+        or parse_map(stream) 
+        or parse_expression7(stream)
+    )
+
+@parser
+def parse_expression7(stream):
+    """
+    expression7
+        = [ "..." ] spreadable
+        | atom
+    """
     spread = parse_token(stream, value="...")
     if parse_token(stream, value="("):
         expression = must(parse_expression(stream))
@@ -573,197 +552,186 @@ def parse_expression6(stream, rollback):
         if spread:
             return [ None, node.ntype_spread, expression ]
         return expression
-    rollback()
     return parse_atom(stream)
     
-
 @parser
-def parse_if_expression(stream, rollback):
+def parse_if_expression(stream):
     """
     if_expression
-        = "if" expression "then" block "else" if_expression
-        | "if" ^ expression "then" block [ "else" ^ block ]
+        = guard ^ "then" block [ "else" ^ ( block | if_expression ) ]
     """
-    if parse_token(stream, value="if"):
-        expression = parse_expression(stream)
-        if expression and parse_token(stream, value="then"):
-            block = parse_block(stream)
-            if block and parse_token(stream, value="else"):
-                if_expression = parse_if_expression(stream)
-                if if_expression:
-                    return [ None, node.ntype_if, expression, block, if_expression ]
-    rollback()
-    if parse_token(stream, value="if"):
-        expression = must(parse_expression(stream))
+    expression = parse_guard(stream)
+    if expression:
         must(parse_token(stream, value="then"))
-        block = must(parse_block(stream))
+        then_block = must(parse_block(stream))
         else_block = None
         if parse_token(stream, value="else"):
-            else_block = must(parse_block(stream))
-        return [ None, node.ntype_if, expression, block, else_block ]
+            else_block = must(parse_block(stream) or parse_if_expression(stream))
+        return [ None, node.ntype_if, expression, then_block, else_block ]
 
 @parser
-def parse_extend_expression(stream, rollback):
-    """
-    extend_expression
-        = "extend" ^ expression
-    """
-    if parse_token(stream, value="extend"):
-        expression = must(parse_expression(stream))
-        return [ None, node.ntype_extend, expression ]
+def parse_guard(stream):
+    if parse_token(stream, value="if"):
+        return must(parse_expression(stream))
 
 @parser
-def parse_do_expression(stream, rollback):
+def parse_do_expression(stream):
     """
     do_expression
         = "do" ^ block
     """
     if parse_token(stream, value="do"):
-        block = must(parse_block(stream))
-        return [ None, node.ntype_do, block ]
+        return must(parse_block(stream))
 
 @parser
-def parse_while_expression(stream, rollback):
+def parse_while_expression(stream):
     """
     while_expression
-        = "while" ^ expression "do" block
+        = while_guard ^ "do" block
     """
-    if parse_token(stream, value="while"):
-        expression = must(parse_expression(stream))
+    expression = parse_while_guard(stream)
+    if expression:
         must(parse_token(stream, value="do"))
         block = must(parse_block(stream))
         return [ None, node.ntype_while, expression, block ]
 
 @parser
-def parse_match_expression(stream, rollback):
+def parse_while_guard(stream):
+    if parse_token(stream, value="while"):
+        return must(parse_expression(stream))
+
+@parser
+def parse_match_expression(stream):
     """
     match_expression
-        = "match" ^ expression "in" "{" cases "}"
+        = "match" ^ expression "with" "{" cases "}"
     """
     if parse_token(stream, value="match"):
-        expression = must(parse_expression(expression))
-        must(parse_token(stream, value="in"))
+        expression = must(parse_expression(stream))
+        must(parse_token(stream, value="with"))
         must(parse_token(stream, value="{"))
         cases = must(parse_cases(stream))
         must(parse_token(stream, value="}"))
-        return [ None, node.ntype_match, *cases ]
+        return [ None, node.ntype_match, expression, *cases ]
 
 @parser
-def parse_for_expression(stream, rollback):
+def parse_for_expression(stream):
     """
     for_expression
-        = "for" ^ pattern "in" expression [ "if" ^ expression ] [ "while" expression ] "do" block
+        = "for" ^ pattern "in" expression [ guard ] [ while_guard ] "do" block
     """
     if parse_token(stream, value="for"):
         pattern = must(parse_pattern(stream))
         must(parse_token(stream, value="in"))
         expression = must(parse_expression(stream))
-        condition = None
-        if parse_token(stream, value="if"):
-            condition = must(parse_expression(stream))
-        while_condition = None
-        if parse_token(stream, value="while"):
-            while_condition = must(parse_expression(stream))
+        guard = parse_guard(stream)
+        while_guard = parse_while_guard(stream)
         must(parse_token(stream, value="do"))
         block = must(parse_block(stream))
-        return [ None, node.ntype_for, pattern, expression, condition, while_condition, block ]
+        return [ None, node.ntype_for, pattern, expression, guard, while_guard, block ]
 
 @parser
-def parse_class_expression(stream, rollback):
+def parse_class_expression(stream):
     """
     class_expression
-        = "Class" ^ "{" patterns [ "if" expression ]  "->" ^ statements "}"
+        = "Class" "{" ^ single "}"
     """
-    if parse_token(stream, value="Class"):
-        if parse_token(stream, value="{"):
-            patterns = parse_patterns(stream)
-            if patterns:
-                condition = None
-                if parse_token(stream, value="if"):
-                    condition = must(parse_expression(stream))
-                if parse_token(stream, value="->"):
-                    statements = must(parse_statements(stream))
-                    must(parse_token(stream, value="}"))
-                    return [ None, node.ntype_class,
-                        [ None, node.ntype_function, 
-                            [ None, node.ntype_case, patterns, condition, 
-                                [ None, node.ntype_block, *statements ]
-                            ]
-                        ]
-                    ]
+    if parse_token(stream, value="Class") and parse_token(stream, value="{"):
+        single = must(parse_single_case(stream))
+        must(parse_token(stream, value="}"))
+        return [ None, node.ntype_class,
+            [ None, node.ntype_function, single ],
+        ]
 
 @parser
-def parse_try_expression(stream, rollback):
+def parse_try_expression(stream):
     """
     try_expression
-        = "try" ^ block "catch" block
+        = "try" ^ block "catch" single_case [ "finally" ^ block [] )
     """
     if parse_token(stream, value="try"):
         try_block = must(parse_block(stream))
         must(parse_token(stream, value="catch"))
-        catch_block = must(parse_block(stream))
-        return [ None, node.ntype_try, try_block, catch_block ]
+        must(parse_token(stream, value="{"))
+        catch = must(parse_single_case(stream))
+        must(parse_token(stream, value="}"))
+        finally_block = parse_token(stream, value="finally") and must(parse_block(stream))
+        return [ None, node.ntype_try, try_block, 
+            [ None, node.ntype_function, catch ],
+            finally_block,
+        ]
 
 @parser
-def parse_throw_expression(stream, rollback):
+def parse_throw_expression(stream):
     """
     throw_expression
-        = "throw" ^ expression [ "if" ^ expression ]
+        = "throw" ^ expression [ guard ]
     """
     if parse_token(stream, value="throw"):
         expression = must(parse_expression(stream))
-        condition = None
-        if parse_token(stream, value="if"):
-            condition = must(parse_expression(stream))
-        return [ None, node.ntype_throw, expression, condition ]
+        return [ None, node.ntype_throw, expression ]
 
 @parser
-def parse_return_expression(stream, rollback):
-    """
-    return_expresssion
-        = "return" ^ expression [ "if" ^ expression ]
-    """
-    if parse_token(stream, value="return"):
-        expression = must(parse_expression(stream))
-        condition = None
-        if parse_token(stream, value="if"):
-            condition = must(parse_expression(stream))
-        return [ None, node.ntype_throw, expression, condition ]
-
-@parser
-def parse_path(stream, rollback):
+def parse_path(stream):
     """
     path
-        = "." <ident>
+        = "." ^ <ident>
         | "[" ".." ^ expression "]"
-        | "[" expression [ ".." ] "]"
+        | "[" ^ expression [ ".." ] "]"
     """
     if parse_token(stream, value="."):
-        ident = parse_token(stream, ntype=node.ntype_ident)
-        return ident
-    rollback()
+        return must(parse_token(stream, ntype=node.ntype_ident))
     if parse_token(stream, value="["):
         if parse_token(stream, value=".."):
             expression = must(parse_expression(stream))
             must(parse_token(stream, value="]"))
             return [ None, node.ntype_range, None, expression ]
-    rollback()
-    if parse_token(stream, value="["):
-        expression = parse_expression(stream)
-        if expression:
-            if parse_token(stream, value=".."):
-                if parse_token(stream, value="]"):
-                    return [ None, node.ntype_range, expression ]
-            if parse_token(stream, value="]"):
-                return expression
+        expression = must(parse_expression(stream))
+        if parse_token(stream, value=".."):
+            must(parse_token(stream, value="]"))
+            return [ None, node.ntype_range, expression ]
+        must(parse_token(stream, value="]"))
+        return expression
 
 @parser
-def parse_call(stream, rollback):
+def parse_call(stream):
     """
     call
-        = "(" expressions ")"
+        = "(" ^ expressions ")"
     """
     if parse_token(stream, value="("):
-        expressions = parse_expressions(stream)
-        if expressions and parse_token(stream, value=")"):
-            return expressions
+        expressions = must(parse_expressions(stream))
+        must(parse_token(stream, value=")"))
+        return expressions
+
+@parser
+def parse_patterns(stream):
+    """
+    patterns
+        = [ pattern ] { "," pattern } [ "," ]
+    """
+    return [ None, node.ntype_patterns, *many(parse_pattern, stream) ]
+
+@parser
+def parse_expressions(stream):
+    """
+    expressions 
+        = expression { "," expression } [ "," ]
+    """
+    return many(parse_expression, stream)
+
+@parser
+def parse_pairs(stream):
+    """
+    pairs 
+        = [ pair ] { "," pair } [ "," ]
+    """
+    return many(parse_pair, stream)
+
+@parser
+def parse_cases(stream):
+    """
+    cases
+        = [ case ] { "," case } [ "," ]
+    """
+    return many(parse_case, stream)

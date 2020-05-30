@@ -27,8 +27,10 @@ def test_tokenize_comments():
     ]
 
 def test_tokenize_whitespace():
-    tokens = tokenizer.tokenize("\t")
+    tokens = tokenizer.tokenize("\t  \n\n")
     assert simplify_tokens(tokens) == [
+        [ node.ntype_terminator, "\n" ],
+        [ node.ntype_terminator, "\n" ],
         [ node.ntype_terminator, "\n" ],
     ]
 

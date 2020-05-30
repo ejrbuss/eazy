@@ -7,14 +7,14 @@
  - Syntactic analysis
  - Reflection
 
-Keywwords
-if, then, else, do, while, for, in, match, return, throw, extend, try, catch, throw
+Keywords
+if, then, else, do, while, for, in, match, with, return, throw, extend, try, catch, throw
 
 Data
 Nothing, True, False, Boolean, Number, String, List, Map, Function, Generator, Class
 
 # Builtins
-import, export, merge, count, copy, print, input, help, type, describe, meta
+import, export, merge, count, copy, print, input, help, type, describe, meta, NaN, Infinity, main, assert
 
 ```
 import
@@ -94,6 +94,8 @@ for x in y while x < y do {
 
 # TODO
  - create error message templtaes that pattern match on
+    - finnally
+    - yield
     - the parser stack
     - the expected production
     - the preeceeding and proceeding token

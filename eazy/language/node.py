@@ -10,6 +10,7 @@ ntype_module = "module"         # [module ...statements]
 ntype_assign = "assign"         # [assign ident expression]
 ntype_var = "var"               # [var pattern expression]
 ntype_return = "return"         # [return expression condition]
+ntype_yield = "yield"           # [yield expression]
 ntype_spread = "spread"         # [spread expression]
 ntype_list = "list"             # [list ...expressions]
 ntype_map = "map"               # [map ...pairs]
@@ -63,6 +64,7 @@ ntypes = [
     ntype_assign,
     ntype_var,
     ntype_return,
+    ntype_yield,
     ntype_spread,
     ntype_list,
     ntype_map,
@@ -114,11 +116,13 @@ binaryop_to_ntype = {
     "/=": ntype_neq,
     "==": ntype_eq,
     "is": ntype_is,
+    "is not": ntype_isnot,
     "<": ntype_lt,
     "<=": ntype_lte,
     ">": ntype_gt,
     ">=": ntype_gte,
     "in": ntype_in,
+    "not in": ntype_notin,
     "+": ntype_add,
     "-": ntype_sub,
     "*": ntype_mul,
