@@ -2,59 +2,76 @@ module
     = statments
 
 statements
-    = { statement ^ <terminator> }
+    = { statement ( <terminator> | <eof> ) }
 
 statement
     = declaration
     | return_statement
     | yield_statement
     | extend_statement
+    | throw_statement
     | assignment
     | expression
 
 declaration
-    = [ <doc> ] "var" ^ pattern "=" expression
-
-assignment
-    = <ident> "=" ^ expression
-
-return_statement
-    = "return" ^ expression
-
-yield_statement
-    = "yield" ^ expression
-
-extend_statement
-    = "extend" ^ expression
+    = [ <doc> ] "var" pattern "=" expression
 
 pattern
-    = list
-    | map
-    | atom
+    | range_pattern
+    | spread_pattern
+    | else_pattern
+    | list_literal
+    | map_literal
+    | literal
+    | <identifier>
 
-list
-    = "List" "[" ^ expressions "]"
+range_pattern
+    = [ <number> ] ".." <number>
+    | <number> ".."
 
-map
-    = ""Map "[" ^ pairs "]"
+spread_pattern
+    = "..." <identifier>
+
+else_pattern
+    = "else"
+
+list_literal
+    = "List" "[" expressions "]"
+
+map_literal
+    = ""Map "[" pairs "]"
 
 pair
-    = <ident> [ ":" ^ expression ]
-    | "[" ^ expression "]" ":" expression
+    = "..." simple_expression
+    | <identifier> [ ":" expression ]
+    | "[" expression "]" ":" expression
 
-function
-    = "Function" "{" ^ ( cases | single_case | statemtns) "}"
+literal
+    = <string>
+    | <number>
+    | <boolean>
+    | <nothing>
 
-single_case
-    = patterns "->" ^ statements
+return_statement
+    = "return" expression
 
-case
-    = patterns [ guard ] "=>" expression
+yield_statement
+    = "yield" expression
 
-block
-    = "{" statements "}"
+extend_statement
+    = "extend" expression
+
+throw_statement
+    = "throw" expression
+
+assignment
+    = <identifier> "=" expression
 
 expression
+    = control_expression
+    | primary_expression
+
+constrol_expression
     = if_expression
     | do_expression
     | while_expression
@@ -62,74 +79,136 @@ expression
     | for_expression
     | class_expression
     | try_expression
-    | throw_expression
-    | function
-    | generator
-    | expression1
 
 if_expression
-    = guard "then" block [ "else" ^ ( block | if_expression ) ]
+    = guard "then" block [ "else" ( block | if_expression ) ]
+
+guard
+    = "if" primary_expression
 
 do_expression
-    = "do" ^ block
+    = "do" block
 
 while_expression
     = while_guard "do" block
 
 while_guard
-    = "while" ^ expression
+    = "while" primary_expression
 
 match_expression
-    = "match" ^ expression "with" "{" cases "}"
+    = "match" primary_expression "with" "{" cases "}"
 
 for_expression
-    = "for" ^ pattern "in" expression [ guard ] [ while_guard ] "do" block
+    = "for" pattern "in" primary_expression [ guard ] [ while_guard ] "do" block
 
 class_expression
-    = "class" ^ single
+    = "Class" case_block
 
 try_expression
-    = "try" ^ block ( "catch" single_case | [ "catch" single_case ] "finally" block )
+    = "try" block "catch" case_block [ "finally" block ]
 
-throw_expression
-    = "throw" ^ expression
+primary_expression
+    = function
+    | generator 
+    | list_literal
+    | map_literal
+    | or_expression
 
-expression1
-    = expression1 { "or" ^ expression1 }
+function
+    = "Function" cases_block
+    | "Function" case_block
 
-expression2
-    = expression3 { "and" ^ expression2 }
+case_block
+    = "{" patterns "->" statements "}"
+    | block
 
-expression3
-    = expression4 { ( "/=" | "==" | "is" | "<" | "<=" | ">" | ">=" | "in" ) ^ expression4 }
+block
+    = "{" statements "}"
 
-expression4
-    = expression5 { ( "+" | "-" ) ^ expression5 }
+cases_block
+    = "{" cases "}"
 
-expression5
-    = expression6 { ( "*" | "/" ) ^ expression6 }
+case
+    = patterns [ guard ] "=>" statement
 
-expression6
-    = ( "not" | "+" | "-" ) ^ expression7
-    | expression7 [ ( ".." | "^" ) expression1 ]
+generator
+    = "Generator" case_block
 
-expression7
-    = list
-    | map
-    | [ "..." ] spreadable
-    | atom
+or_expression
+    = and_expression { "or" and_expression }
 
-spreadable
-    = "(" ^ expression ")" { { path } call }
-    | <ident> { { path } call }
+and_expression
+    = relational_expression { "and" relational_expression }
 
-path
-    = "." ^ <ident>
-    | "[" ".." ^ expression "]"
-    | "[" ^ expression [ ".." ] "]"
+relational_expression
+    = additive_expression { relational_operator additive_expression }
+
+relational_operator
+    = "/=" 
+    | "=="
+    | "is not"
+    | "is"
+    | "<" 
+    | "<=" 
+    | ">" 
+    | ">=" 
+    | "not in"
+    | "in"
+
+additive_expression
+    = multiplicative_expression { additive_operator multiplicative_expression }
+
+additive_operator
+    = "+"
+    | "-"
+
+multiplicative_expression
+    = exponential_expression { multiplicative_operator exponential_expression }
+
+multiplicative_operator
+    = "*"
+    | "/"
+
+exponential_expression
+    = unary_expression [ exponential_operator exponential_expression ]
+
+exponential_operator
+    = "^"
+    | ".."
+
+unary_expression
+    = [ unary_operator ] simple_expression { calls_and_accesses }
+
+unary_operator
+    = "not"
+    | "+"
+    | "-"
+    | "..."
+
+simple_expression
+    = "(" expression ")"
+    | literal
+    | <identifier>
+
+calls_and_accesses
+    = { [ call ] [ access ] }
 
 call
-    = "(" ^ expressions ")"
+    = "(" expressions ")"
+
+access
+    = identifier_access
+    | expression_access
+    | pattern_access
+
+identifier_access
+    = "." <identifier>
+
+expression_access
+    = "[" expression "]"
+
+pattern_access
+    = "[" pattern "]"
 
 patterns
     = [ pattern ] { "," pattern } [ "," ]

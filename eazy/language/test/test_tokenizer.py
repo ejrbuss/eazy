@@ -1,3 +1,5 @@
+import math
+
 from .. import tokenizer
 from .. import node
 
@@ -14,15 +16,18 @@ def test_tokenize_metadata():
     ]
 
 def test_tokenize_doc_comments():
-    tokens = tokenizer.tokenize("--- a doc comment ---")
+    tokens = tokenizer.tokenize("--- a doc comment ---\nvar")
     assert simplify_tokens(tokens) == [ 
         [ node.ntype_doc, " a doc comment "],
+        [ node.ntype_terminator, "\n" ],
+        [ node.ntype_ident, "var" ],
         [ node.ntype_terminator, "\n" ],
     ]
 
 def test_tokenize_comments():
-    tokens = tokenizer.tokenize("-- a comment")
+    tokens = tokenizer.tokenize("-- a comment\n---\na multilne comment\n---")
     assert simplify_tokens(tokens) == [
+        [ node.ntype_terminator, "\n" ],
         [ node.ntype_terminator, "\n" ],
     ]
 
@@ -71,6 +76,17 @@ def test_tokenize_operators():
         [ node.ntype_terminator, "\n" ],
     ]
 
+def test_tokenize_word_operators():
+    tokens = tokenizer.tokenize("not in is not not is in")
+    assert simplify_tokens(tokens) == [
+        [ node.ntype_token, "not in" ],
+        [ node.ntype_token, "is not" ],
+        [ node.ntype_token, "not" ],
+        [ node.ntype_token, "is" ],
+        [ node.ntype_token, "in" ],
+        [ node.ntype_terminator, "\n" ],
+    ]
+
 def test_tokenize_binary_numbers():
     tokens = tokenizer.tokenize("0b101011 0B11_01")
     assert simplify_tokens(tokens) == [
@@ -104,12 +120,14 @@ def test_tokenize_decimal_numbers():
     ]
 
 def test_tokenize_floats():
-    tokens = tokenizer.tokenize("3.14 1.1e-4 12E4_5 0.1_e+1_")
+    tokens = tokenizer.tokenize("3.14 1.1e-4 12E4_5 0.1_e+1_ Infinity NaN")
     assert simplify_tokens(tokens) == [
         [ node.ntype_number, 3.14 ],
         [ node.ntype_number, 1.1e-4 ],
         [ node.ntype_number, 12E45 ],
         [ node.ntype_number, 0.1e+1 ],
+        [ node.ntype_number, math.inf ],
+        [ node.ntype_number, math.nan ],
         [ node.ntype_terminator, "\n" ],
     ]
 
@@ -141,8 +159,51 @@ def test_tokenize_raw_string():
         [ node.ntype_terminator, "\n" ],
     ]
 
+def test_tokenize_nothing():
+    tokens = tokenizer.tokenize("Nothing")
+    assert simplify_tokens(tokens) == [
+        [ node.ntype_nothing, "Nothing" ],
+        [ node.ntype_terminator, "\n" ],
+    ]
+
+def test_tokenize_booleans():
+    tokens = tokenizer.tokenize("True False")
+    assert simplify_tokens(tokens) == [
+        [ node.ntype_boolean, True ],
+        [ node.ntype_boolean, False ],
+        [ node.ntype_terminator, "\n" ],
+    ]
+
+def test_tokenize_else():
+    tokens = tokenizer.tokenize("else")
+    assert simplify_tokens(tokens) == [
+        [ node.ntype_else, "else" ],
+        [ node.ntype_terminator, "\n" ],
+    ]
+
+def test_tokenize_keywords():
+    tokens = tokenizer.tokenize("if then do while for in match with return yield throw extend try catch finally")
+    assert simplify_tokens(tokens) == [
+        [ node.ntype_token, "if" ],
+        [ node.ntype_token, "then" ],
+        [ node.ntype_token, "do" ],
+        [ node.ntype_token, "while" ],
+        [ node.ntype_token, "for" ],
+        [ node.ntype_token, "in" ],
+        [ node.ntype_token, "match" ],
+        [ node.ntype_token, "with" ],
+        [ node.ntype_token, "return" ],
+        [ node.ntype_token, "yield" ],
+        [ node.ntype_token, "throw" ],
+        [ node.ntype_token, "extend" ],
+        [ node.ntype_token, "try" ],
+        [ node.ntype_token, "catch" ],
+        [ node.ntype_token, "finally" ],
+        [ node.ntype_terminator, "\n" ],
+    ]
+
 def test_tokenize_ident():
-    tokens = tokenizer.tokenize("i variable_snake_case camelCase _ 𝜋2 λ βeta_version")
+    tokens = tokenizer.tokenize("i variable_snake_case camelCase _ 𝜋2 λ βeta_version even?")
     assert simplify_tokens(tokens) == [
         [ node.ntype_ident, "i" ],
         [ node.ntype_ident, "variable_snake_case" ],
@@ -151,5 +212,6 @@ def test_tokenize_ident():
         [ node.ntype_ident, "𝜋2" ],
         [ node.ntype_ident, "λ" ],
         [ node.ntype_ident, "βeta_version" ],
+        [ node.ntype_ident, "even?" ],
         [ node.ntype_terminator, "\n" ],
     ]

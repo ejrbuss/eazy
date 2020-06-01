@@ -2,36 +2,6 @@ from .. import parser
 from .. import tokenizer
 from .. import node
 
-"""
-ntypes = [
-    ntype_or,
-    ntype_and,
-    ntype_neq,
-    ntype_eq,
-    ntype_is,
-    ntype_isnot,
-    ntype_lt,
-    ntype_lte,
-    ntype_gt,
-    ntype_gte,
-    ntype_in,
-    ntype_notin,
-    ntype_add,
-    ntype_sub,
-    ntype_mul,
-    ntype_div,
-    ntype_not,
-    ntype_pos,
-    ntype_neg,
-    ntype_range,
-    ntype_pow,
-    ntype_call,
-    ntype_ident,
-    ntype_string,
-    ntype_number,
-]
-"""
-
 def test_parse_module():
     ast = parser.parse(tokenizer.tokenize(""))
     assert node.simplify_node(ast) == [ node.ntype_module ]
@@ -57,6 +27,30 @@ def test_parse_var():
             [ node.ntype_number, 3.14 ],
             None,
         ]
+    ]
+
+def test_parse_return():
+    ast = parser.parse(tokenizer.tokenize("return 4"))
+    assert node.simplify_node(ast) == [ node.ntype_module, 
+        [ node.ntype_return, [ node.ntype_number, 4 ], ]
+    ]
+
+def test_parse_yield():
+    ast = parser.parse(tokenizer.tokenize("yield 4"))
+    assert node.simplify_node(ast) == [ node.ntype_module, 
+        [ node.ntype_yield, [ node.ntype_number, 4 ], ]
+    ]
+
+def test_parse_extend():
+    ast = parser.parse(tokenizer.tokenize("extend x"))
+    assert node.simplify_node(ast) == [ node.ntype_module, 
+        [ node.ntype_extend, [ node.ntype_ident, "x" ] ]
+    ]
+
+def test_parse_throw():
+    ast = parser.parse(tokenizer.tokenize("throw x"))
+    assert node.simplify_node(ast) == [ node.ntype_module, 
+        [ node.ntype_throw, [ node.ntype_ident, "x" ] ],
     ]
 
 def test_parse_assign():
@@ -221,56 +215,12 @@ def test_parse_generator():
         ],
     ]
 
-def test_parse_or_expression():
-    ast = parser.parse(tokenizer.tokenize("a or b"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_or, 
-            [ node.ntype_ident, "a" ],
-            [ node.ntype_ident, "b" ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("a or b or c"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_or,
-            [ node.ntype_or, 
-                [ node.ntype_ident, "a" ],
-                [ node.ntype_ident, "b" ],
-            ],
-            [ node.ntype_ident, "c" ],
-        ],
-    ]
-
-def test_parse_and_expression():
-    ast = parser.parse(tokenizer.tokenize("a and b"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_and, 
-            [ node.ntype_ident, "a" ],
-            [ node.ntype_ident, "b" ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("a and b and c"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_and,
-            [ node.ntype_and, 
-                [ node.ntype_ident, "a" ],
-                [ node.ntype_ident, "b" ],
-            ],
-            [ node.ntype_ident, "c" ],
-        ],
-    ]
-
-
-
-
-
-
-
 def test_parse_if():
     ast = parser.parse(tokenizer.tokenize("if x then { True }"))
     assert node.simplify_node(ast) == [ node.ntype_module, 
         [ node.ntype_if,
             [ node.ntype_ident, "x" ],
-            [ node.ntype_block, [ node.ntype_ident, "True" ] ],
+            [ node.ntype_block, [ node.ntype_boolean, True ] ],
             None,
         ],
     ]
@@ -278,28 +228,23 @@ def test_parse_if():
     assert node.simplify_node(ast) == [ node.ntype_module, 
         [ node.ntype_if,
             [ node.ntype_ident, "x" ],
-            [ node.ntype_block, [ node.ntype_ident, "True" ] ],
-            [ node.ntype_block, [ node.ntype_ident, "False" ] ],
+            [ node.ntype_block, [ node.ntype_boolean, True ] ],
+            [ node.ntype_block, [ node.ntype_boolean, False ] ],
         ],
     ]
     ast = parser.parse(tokenizer.tokenize("if x then { True } else if y then { False }"))
     assert node.simplify_node(ast) == [ node.ntype_module, 
         [ node.ntype_if,
             [ node.ntype_ident, "x" ],
-            [ node.ntype_block, [ node.ntype_ident, "True" ] ],
+            [ node.ntype_block, [ node.ntype_boolean, True ] ],
             [ node.ntype_if,
                 [ node.ntype_ident, "y" ],
-                [ node.ntype_block, [ node.ntype_ident, "False" ] ],
+                [ node.ntype_block, [ node.ntype_boolean, False ] ],
                 None,
             ],
         ],
     ]
 
-def test_parse_extend():
-        ast = parser.parse(tokenizer.tokenize("extend x"))
-        assert node.simplify_node(ast) == [ node.ntype_module, 
-            [ node.ntype_extend, [ node.ntype_ident, "x" ] ]
-        ]
 
 def test_parse_do():
     ast = parser.parse(tokenizer.tokenize("do { x }"))
@@ -330,7 +275,7 @@ def test_ntype_match():
             ],
             [ node.ntype_case, 
                 [ node.ntype_patterns,
-                    [ node.ntype_ident, "else" ],
+                    [ node.ntype_else, "else" ],
                 ],
                 None,
                 [ node.ntype_number, 5 ],
@@ -430,24 +375,131 @@ def test_parse_try_expression():
         ],
     ]
 
-def test_parse_throw():
-    ast = parser.parse(tokenizer.tokenize("throw x"))
+def test_parse_or_expression():
+    ast = parser.parse(tokenizer.tokenize("a or b or c"))
     assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_throw, [ node.ntype_ident, "x" ] ],
+        [ node.ntype_or,
+            [ node.ntype_or, 
+                [ node.ntype_ident, "a" ],
+                [ node.ntype_ident, "b" ],
+            ],
+            [ node.ntype_ident, "c" ],
+        ],
     ]
 
-def test_parse_return():
-    ast = parser.parse(tokenizer.tokenize("return 4"))
+def test_parse_and_expression():
+    ast = parser.parse(tokenizer.tokenize("a and b and c"))
     assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_return, [ node.ntype_number, 4 ], ]
+        [ node.ntype_and,
+            [ node.ntype_and, 
+                [ node.ntype_ident, "a" ],
+                [ node.ntype_ident, "b" ],
+            ],
+            [ node.ntype_ident, "c" ],
+        ],
     ]
 
-def test_parse_yield():
-    ast = parser.parse(tokenizer.tokenize("yield 4"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_yield, [ node.ntype_number, 4 ], ]
+def test_parse_comparison_expression():
+    ast = parser.parse(tokenizer.tokenize("""
+        a /= b == c is not d is e < f <= g > h >= i in j not in k
+    """))
+    assert node.simplify_node(ast) == [ node.ntype_module,
+        [ node.ntype_notin,
+            [ node.ntype_in,
+                [ node. ntype_gte, 
+                    [ node.ntype_gt,
+                        [ node.ntype_lte,
+                            [ node.ntype_lt,
+                                [ node.ntype_is,
+                                    [ node.ntype_isnot, 
+                                        [ node.ntype_eq,
+                                            [ node.ntype_neq,
+                                                [ node.ntype_ident, "a" ],
+                                                [ node.ntype_ident, "b" ],
+                                            ],
+                                            [ node.ntype_ident, "c" ],
+                                        ],
+                                        [ node.ntype_ident, "d" ],
+                                    ],
+                                    [ node.ntype_ident, "e" ],
+                                ],
+                                [ node.ntype_ident, "f" ],
+                            ],
+                            [ node.ntype_ident, "g" ],
+                        ],
+                        [ node.ntype_ident, "h" ],
+                    ],
+                    [ node.ntype_ident, "i" ],
+                ],
+                [ node.ntype_ident, "j"],
+            ],
+            [ node.ntype_ident, "k" ],
+        ],
     ]
 
+def test_add_and_sub():
+    ast = parser.parse(tokenizer.tokenize("a + b - c"))
+    assert node.simplify_node(ast) == [ node.ntype_module,
+        [ node.ntype_sub,
+            [ node.ntype_add,
+                [ node.ntype_ident, "a" ],
+                [ node.ntype_ident, "b" ],  
+            ],
+            [ node.ntype_ident, "c" ],
+        ],
+    ]
+
+def test_mul_and_div():
+    ast = parser.parse(tokenizer.tokenize("a * b / c"))
+    assert node.simplify_node(ast) == [ node.ntype_module,
+        [ node.ntype_div,
+            [ node.ntype_mul,
+                [ node.ntype_ident, "a" ],
+                [ node.ntype_ident, "b" ],
+            ],
+            [ node.ntype_ident, "c" ],
+        ],
+    ]
+
+def test_not_pos_and_neg():
+    ast = parser.parse(tokenizer.tokenize("not a ; +4 ; -5 "))
+    assert node.simplify_node(ast) == [ node.ntype_module,
+        [ node.ntype_not, 
+            [ node.ntype_ident, "a"],
+        ],
+        [ node.ntype_pos, 
+            [ node.ntype_number, 4 ],
+        ],
+        [ node.ntype_neg, 
+            [ node.ntype_number, 5 ],
+        ],
+    ]
+    ast = parser.parse(tokenizer.tokenize("a - - b"))
+    assert node.simplify_node(ast) == [ node.ntype_module,
+        [ node.ntype_sub, 
+            [ node.ntype_ident, "a"],
+            [ node.ntype_neg,
+                [ node.ntype_ident, "b" ],
+            ],
+        ],
+    ]
+
+def test_range_and_pow():
+    ast = parser.parse(tokenizer.tokenize("1..4 ; 2^3^4"))
+    print(node.print_node(ast))
+    assert node.simplify_node(ast) == [ node.ntype_module,
+        [ node.ntype_range,
+            [ node.ntype_number, 1 ],
+            [ node.ntype_number, 4 ],
+        ],
+        [ node.ntype_pow,
+            [ node.ntype_number, 2 ],
+            [ node.ntype_pow,
+                [ node.ntype_number, 3 ],
+                [ node.ntype_number, 4 ],
+            ],  
+        ],
+    ]
 
 def test_parse_path():
     ast = parser.parse(tokenizer.tokenize("x.y[1].z[2]"))
@@ -466,19 +518,27 @@ def test_parse_path():
             [ node.ntype_number, 2 ],
         ],
     ]
-
-
-
-    
-
-    
-
-
-    
-
-    
-
-
-
-
+    ast = parser.parse(tokenizer.tokenize("x[a..n][1..][..c]"))
+    print(node.print_node(ast))
+    assert node.simplify_node(ast) == [ node.ntype_module, 
+        [ node.ntype_path,
+            [ node.ntype_path, 
+                [ node.ntype_path,
+                    [ node.ntype_ident, "x" ],
+                    [ node.ntype_range,
+                        [ node.ntype_ident, "a" ],
+                        [ node.ntype_ident, "n" ],
+                    ]
+                ],
+                [ node.ntype_range,
+                    [ node.ntype_number, 1],
+                    None,
+                ]
+            ],
+            [ node.ntype_range,
+                None,
+                [ node.ntype_ident, "c" ],
+            ]
+        ],
+    ]
 

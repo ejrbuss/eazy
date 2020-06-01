@@ -8,7 +8,7 @@
  - Reflection
 
 Keywords
-if, then, else, do, while, for, in, match, with, return, throw, extend, try, catch, throw
+if, then, else, do, while, for, in, match, with, return, throw, extend, try, catch, finally
 
 Data
 Nothing, True, False, Boolean, Number, String, List, Map, Function, Generator, Class
@@ -100,3 +100,58 @@ for x in y while x < y do {
     - the expected production
     - the preeceeding and proceeding token
     - once a few are matching, just create error messages as you go
+
+
+-- Some meta programming
+var eazy = import("eazy")
+var Map [ eval_string, eval, node: t ] = eazy
+
+var x = eval_string("4 + 4")
+print(x) --> 8
+
+var y = eval(List [ t.module,
+   List [ t.add, 
+      List [ t.number, 4 ],
+      List [ t.number, 4 ],
+   ],
+])
+print(y) --> 8
+
+print(describe(eazy.language.parse("4 + 4")))
+--> List [ "module",
+--      List [ "add", 
+--          List [ "number", 4 ],
+--          List [ "number, 4 ],
+--      ],
+--  ]
+
+
+var Shape = Class {}
+
+var Rectangle = Class { width, height ->
+   extend Shape()
+   if use_object:
+      extend Object()
+   var width = width
+   var height = height
+}
+
+r = Rectangle(3, 4)
+
+class.of(r)
+Class.instance_of?(r, Rectangle) --> True
+Class.instance_of?(r, Shape) --> True
+
+
+# Potential Additional features
+-- default arguments
+Function { x, y ...z, sep:"," -> }
+
+-- named arguments
+f(1, 2, 3, sep:" ")
+
+-- macros
+var compile_time = Function { ast ->
+   eazy.language.as_node(eazy.eval(ast))
+}
+@compile_time(4 + 4)

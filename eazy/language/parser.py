@@ -1,5 +1,11 @@
 from . import node
 
+# TODO 
+# -refactor to make greater use of lookahead rather than always relying on 
+#  rollbacks
+# - Keep track of parser stack in stream (can be managed by decorator and must)
+
+
 def parse(tokens):
     return parse_module(stream_of(tokens))
 
@@ -15,10 +21,25 @@ def many(parse, stream):
         part = parse_token(stream, value=",") and parse(stream)
     return parts
 
-def merge_tokens(token1, token2):
-    meta1, ntype1, value1 = token1
-    meta2, ntype2, value2 = token2
-    return [ meta1, ntype1, value1 + value2 ]
+def binary(parse, stream, operators):
+    """
+    binary
+        = parse { operators parse }
+    """
+    def parse_operation(stream):
+        for operator in operators:
+            token = parse_token(stream, value=operator)
+            if token:
+                return node.binaryop_to_ntype[token[2]]
+
+    left = parse(stream)
+    if left:
+        operation = parse_operation(stream)
+        while operation:
+            right = must(parse(stream))
+            left = [ None, operation, left, right ]
+            operation = parse_operation(stream)
+        return left
 
 def stream_of(tokens):
     return {
@@ -26,24 +47,24 @@ def stream_of(tokens):
         "tokens": tokens
     }
 
-def stream_position(stream, skip_newlines=True, skip_docs=True):
+def stream_position(stream, skip_newlines=True):
     position = stream["position"]
-    while position < len(stream["tokens"]) and (
-        (skip_newlines and stream["tokens"][position][2] == "\n") or
-        (skip_docs and stream["tokens"][position][1] == node.ntype_doc)
+    while (position < len(stream["tokens"]) 
+        and skip_newlines 
+        and stream["tokens"][position][2] == "\n"
     ):
         position += 1
     return position
 
-def stream_top(stream, skip_newlines=True, skip_docs=True):
-    position = stream_position(stream, skip_newlines, skip_docs)
+def stream_top(stream, skip_newlines=True):
+    position = stream_position(stream, skip_newlines)
     if position < len(stream["tokens"]):
         return stream["tokens"][position]
     return None
 
-def stream_chomp(stream, skip_newlines=True, skip_docs=True):
-    token = stream_top(stream, skip_newlines, skip_docs)
-    position = stream_position(stream, skip_newlines, skip_docs)
+def stream_chomp(stream, skip_newlines=True):
+    token = stream_top(stream, skip_newlines)
+    position = stream_position(stream, skip_newlines)
     stream["position"] = position + 1
     return token
 
@@ -52,8 +73,7 @@ def stream_done(stream):
 
 def peek_token(stream, ntype=None, value=None):
     skip_newlines = ntype != node.ntype_terminator
-    skip_docs = ntype != node.ntype_doc
-    token = stream_top(stream, skip_newlines, skip_docs)
+    token = stream_top(stream, skip_newlines)
     if not token:
         return None
     _, token_ntype, token_value = token
@@ -66,8 +86,7 @@ def peek_token(stream, ntype=None, value=None):
 def parse_token(stream, ntype=None, value=None):
     if peek_token(stream, ntype, value):
         skip_newlines = ntype != node.ntype_terminator
-        skip_docs = ntype != node.ntype_doc
-        return stream_chomp(stream, skip_newlines, skip_docs)
+        return stream_chomp(stream, skip_newlines)
 
 def parser(function):
     def wrapper(stream):
@@ -99,8 +118,8 @@ def parse_statements(stream):
     statement = parse_statement(stream)
     while statement:
         # print()
-        # print("statements:", node.print_node(statement))
-        # print("stream:", stream_top(stream))
+        print("statements:", node.print_node(statement))
+        print("stream:", stream_top(stream))
         must(parse_token(stream, ntype=node.ntype_terminator) or peek_token(stream, value="}"))
         statements.append(statement)
         statement = parse_statement(stream)
@@ -114,6 +133,7 @@ def parse_statement(stream):
         | return_statement
         | yield_statement
         | extend_statement
+        | throw_statement
         | assignment
         | expression
     """
@@ -122,6 +142,7 @@ def parse_statement(stream):
         or parse_return_statement(stream)
         or parse_yield_statement(stream)
         or parse_extend_statement(stream)
+        or parse_throw_statement(stream)
         or parse_expression(stream)
     )
 
@@ -169,6 +190,16 @@ def parse_extend_statement(stream):
         return [ None, node.ntype_extend, expression ]
 
 @parser
+def parse_throw_statement(stream):
+    """
+    throw_expression
+        = "throw" ^ expression [ guard ]
+    """
+    if parse_token(stream, value="throw"):
+        expression = must(parse_expression(stream))
+        return [ None, node.ntype_throw, expression ]
+
+@parser
 def parse_assignment(stream):
     """
     assignment
@@ -186,30 +217,15 @@ def parse_pattern(stream):
     pattern
         = list
         | map
+        | open_range
         | atom
+        | "else"
     """
-    list_literal = parse_list(stream)
-    if list_literal:
-        return list_literal
-    map_literal = parse_map(stream)
-    if map_literal:
-        return map_literal
-    return parse_atom(stream)
-
-@parser
-def parse_atom(stream):
-    """
-    atom
-        | [ "..." ^ ] <ident>
-        | <string>
-        | <number>
-    """
-    if parse_token(stream, value="..."):
-        ident = must(parse_token(stream, ntype=node.ntype_ident))
-        return [ None, node.ntype_spread, ident ]
-    return (parse_token(stream, ntype=node.ntype_ident)
-        or parse_token(stream, ntype=node.ntype_string)
-        or parse_token(stream, ntype=node.ntype_number)
+    return (parse_list(stream)
+        or parse_map(stream)
+        or parse_open_range(stream)
+        or parse_atom(stream)
+        or parse_token(stream, value="else")
     )
 
 @parser
@@ -227,6 +243,49 @@ def parse_map(stream):
             pairs = must(parse_pairs(stream))
             must(parse_token(stream, value="]"))
             return [ None, node.ntype_map, *pairs ]
+
+@parser
+def parse_open_range(stream):
+    """
+    open_range
+        = ".." <number>
+        | <number> ".."
+    """
+    if parse_token(stream, value=".."):
+        top = must(parse_token(stream, ntype=node.ntype_number))
+        return [ None, node.ntype_range, None, top ]
+    bottom = parse_token(stream, ntype=node.ntype_number)
+    if bottom and parse_token(stream, value=".."):
+        return [ None, node.ntype_range, bottom, None ]
+
+@parser
+def parse_atom(stream):
+    """
+    atom
+        | [ "..." ^ ] <ident>
+        | literal
+    """
+    if parse_token(stream, value="..."):
+        ident = must(parse_token(stream, ntype=node.ntype_ident))
+        return [ None, node.ntype_spread, ident ]
+    return parse_token(stream, ntype=node.ntype_ident) or parse_literal(stream)
+
+@parser
+def parse_literal(stream):
+    """
+    literal
+        = <string>
+        | <number>
+        | <boolean>
+        | <nothing>
+    """
+    return (parse_token(stream, ntype=node.ntype_ident)
+        or parse_token(stream, ntype=node.ntype_string)
+        or parse_token(stream, ntype=node.ntype_number)
+        or parse_token(stream, ntype=node.ntype_boolean)
+        or parse_token(stream, ntype=node.ntype_nothing)
+    )
+
 
 @parser
 def parse_pair(stream):
@@ -321,239 +380,46 @@ def parse_generator(stream):
 def parse_case(stream):
     """
     case
-        = patterns [ guard ] "=>" ^ expression
+        = patterns [ guard ] "=>" ^ statement
     """
     patterns = parse_patterns(stream)
     if patterns:
         guard = parse_guard(stream)
         if parse_token(stream, value="=>"):
-            body = must(parse_expression(stream))
+            body = must(parse_statement(stream))
             return [ None, node.ntype_case, patterns, guard, body ]
 
 @parser
 def parse_expression(stream):
     """
-    expression 
-        = expression1 { "or" ^ expression1 }
-    """
-
-    @parser
-    def parse_operation(stream):
-        return parse_token(stream, value="or")
-
-    expression = parse_expression1(stream)
-    if expression:
-        operation = parse_operation(stream)
-        while operation:
-            right = must(parse_expression1(stream))
-            expression = [ None, node.binaryop_to_ntype[operation[2]], expression, right ]
-            operation = parse_operation(stream)
-        return expression
-    
-@parser
-def parse_expression1(stream):
-    """
-    expression1
-        = expression2 { "and" ^ expression2 }
-    """
-
-    @parser
-    def parse_operation(stream):
-        return parse_token(stream, value="and")
-
-    expression = parse_expression2(stream)
-    if expression:
-        operation = parse_operation(stream)
-        while operation:
-            right = must(parse_expression2(stream))
-            expression = [ None, node.binaryop_to_ntype[operation[2]], expression, right ]
-            operation = parse_operation(stream)
-        return expression
-
-@parser
-def parse_expression2(stream):
-    """
-    expression2
-        = expression3  { ( "/=" | "==" | "is" "not" | "is" | "<" | "<=" | ">" | ">=" | "in" | "not" "in") ^ expression3 }
-    """
-    
-    @parser
-    def parse_operation(stream):
-        operation = (parse_token(stream, value="/=")
-            or parse_token(stream, value="==")
-            or parse_token(stream, value="<")
-            or parse_token(stream, value="<=")
-            or parse_token(stream, value=">")
-            or parse_token(stream, value=">=")
-            or parse_token(stream, value="in")
-        )
-        if operation:
-            return operation
-        isop = parse_token(stream, value="is")
-        if isop:
-            notop = parse_token(stream, value="not")
-            if notop:
-                return merge_tokens(isop, notop)
-            return isop
-        notop = parse_token(stream, value="not")
-        if notop:
-            inop = parse_token(stream, value="in")
-            if inop:
-                return merge_tokens(notop, inop)
-
-    expression = parse_expression3(stream)
-    if expression:
-        operation = parse_operation(stream)
-        while operation:
-            right = must(parse_expression3(stream))
-            expression = [ None, node.binaryop_to_ntype[operation[2]], expression, right ]
-            operation = parse_operation(stream)
-        return expression
-        
-@parser
-def parse_expression3(stream):
-    """
-    expression3
-        = expression4 { ( "+" | "-" ) ^ expression4 }
-    """
-
-    @parser
-    def parse_operation(stream):
-        return parse_token(stream, value="+") or parse_token(stream, value="-")
-
-    expression = parse_expression4(stream)
-    if expression:
-        operation = parse_operation(stream)
-        while operation:
-            right = must(parse_expression4(stream))
-            expression = [ None, node.binaryop_to_ntype[operation[2]], expression, right ]
-            operation = parse_operation(stream)
-        return expression
-
-@parser
-def parse_expression4(stream):
-    """
-    expression4
-        = expression5 { ( "*" | "/" ) ^ expression5 }
-    """
-
-    @parser
-    def parse_operation(stream):
-        return parse_token(stream, value="*") or parse_token(stream, value="/")
-
-    expression = parse_expression5(stream)
-    if expression:
-        operation = parse_operation(stream)
-        while operation:
-            right = must(parse_expression5(stream))
-            expression = [ None, node.binaryop_to_ntype[operation[2]], expression, right ]
-            operation = parse_operation(stream)
-        return expression
-
-@parser
-def parse_expression5(stream):
-    """
-    expression5
-        = ( "not" | "+" | "-" ) ^ expression
-        | expression6 [ ( ".." | "^" ) expression ]
-    """
-    operation = (parse_token(stream, value="not") 
-        or parse_token(stream, value="+")
-        or parse_token(stream, value="-")
-    )
-    if operation:
-        expression = must(parse_expression(stream))
-        return [ None, node.binaryop_to_ntype[operation[2]], expression ]
-    expression = parse_expression6(stream)
-    if expression:
-        operation = parse_token(stream, value="..") or parse_token(stream, value="^")
-        if operation:
-            right = must(parse_expression(stream))
-            return [ None, node.binaryop_to_ntype[operation[2]], expression, right ]
-        return expression
-    
-@parser
-def parse_expression6(stream):
-    """
-    expression6 =
-        | if_expression
-        | extend_expression
+    expression
+        = if_expression
         | do_expression
         | while_expression
         | match_expression
         | for_expression
         | class_expression
         | try_expression
-        | throw_expression
-        | return_expression
-        | yield_expression
         | function
         | generator
         | list
         | map
-        | expression7
+        | expression1
     """
     return (parse_if_expression(stream)
-        or parse_do_expression(stream) 
-        or parse_while_expression(stream) 
-        or parse_match_expression(stream) 
-        or parse_for_expression(stream) 
-        or parse_class_expression(stream) 
-        or parse_try_expression(stream) 
-        or parse_throw_expression(stream) 
-        or parse_function(stream) 
-        or parse_generator(stream) 
-        or parse_list(stream) 
-        or parse_map(stream) 
-        or parse_expression7(stream)
+        or parse_do_expression(stream)
+        or parse_while_expression(stream)
+        or parse_match_expression(stream)
+        or parse_for_expression(stream)
+        or parse_class_expression(stream)
+        or parse_try_expression(stream)
+        or parse_function(stream)
+        or parse_generator(stream)
+        or parse_list(stream)
+        or parse_map(stream)
+        or parse_expression1(stream)
     )
 
-@parser
-def parse_expression7(stream):
-    """
-    expression7
-        = [ "..." ] spreadable
-        | atom
-    """
-    spread = parse_token(stream, value="...")
-    if parse_token(stream, value="("):
-        expression = must(parse_expression(stream))
-        must(parse_token(stream, value=")"))
-        path = parse_path(stream)
-        while path:
-            expression = [ None, node.ntype_path, expression, path ]
-            path = parse_path(stream)
-        call = parse_call(stream)
-        while call:
-            expression = [ None, node.ntype_call, expression, *call ]
-            path = parse_path(stream)
-            while path:
-                expression = [ None, node.ntype_path, expression, path ]
-                path = parse_path(stream)
-            call = parse_call(stream)
-        if spread:
-            return [ None, node.ntype_spread, expression ]
-        return expression
-    ident = parse_token(stream, ntype=node.ntype_ident)
-    if ident:
-        expression = ident
-        path = parse_path(stream)
-        while path:
-            expression = [ None, node.ntype_path, expression, path ]
-            path = parse_path(stream)
-        call = parse_call(stream)
-        while call:
-            expression = [ None, node.ntype_call, expression, *call ]
-            path = parse_path(stream)
-            while path:
-                expression = [ None, node.ntype_path, expression, path ]
-                path = parse_path(stream)
-            call = parse_call(stream)
-        if spread:
-            return [ None, node.ntype_spread, expression ]
-        return expression
-    return parse_atom(stream)
-    
 @parser
 def parse_if_expression(stream):
     """
@@ -571,6 +437,10 @@ def parse_if_expression(stream):
 
 @parser
 def parse_guard(stream):
+    """
+        guard
+            = "if" ^ expression
+    """
     if parse_token(stream, value="if"):
         return must(parse_expression(stream))
 
@@ -611,6 +481,7 @@ def parse_match_expression(stream):
         must(parse_token(stream, value="with"))
         must(parse_token(stream, value="{"))
         cases = must(parse_cases(stream))
+        print(stream_top(stream))
         must(parse_token(stream, value="}"))
         return [ None, node.ntype_match, expression, *cases ]
 
@@ -662,34 +533,153 @@ def parse_try_expression(stream):
         ]
 
 @parser
-def parse_throw_expression(stream):
+def parse_expression1(stream):
     """
-    throw_expression
-        = "throw" ^ expression [ guard ]
+    expression1
+        = expression2 { "or" ^ expression2 }
     """
-    if parse_token(stream, value="throw"):
+    return binary(parse_expression2, stream, [ "or" ])
+    
+@parser
+def parse_expression2(stream):
+    """
+    expression2
+        = expression3 { "and" ^ expression3 }
+    """
+    return binary(parse_expression3, stream, [ "and" ])
+
+@parser
+def parse_expression3(stream):
+    """
+    expression3
+        = expression4  { ( "/=" | "==" | "is not" | "is" | "<" | "<=" | ">" | ">=" | "in" | "not in") ^ expression4 }
+    """
+    return binary(parse_expression4, stream, [
+        "/=",
+        "==",
+        "is not",
+        "is",
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "in",
+        "not in"
+    ])
+        
+@parser
+def parse_expression4(stream):
+    """
+    expression4
+        = expression5 { ( "+" | "-" ) ^ expression5 }
+    """
+    return binary(parse_expression5, stream, [ "+", "-" ])
+
+@parser
+def parse_expression5(stream):
+    """
+    expression5
+        = expression6 { ( "*" | "/" ) ^ expression6 }
+    """
+    return binary(parse_expression6, stream, [ "*", "/" ])
+
+@parser
+def parse_expression6(stream):
+    """
+    expression6
+        = unary_operator ^ expression7
+        | expression7 [ ( ".." | "^" ) expression6 ]
+    """
+    unary_operator = parse_unary_operator(stream)
+    if unary_operator:
         expression = must(parse_expression(stream))
-        return [ None, node.ntype_throw, expression ]
+        return [ None, node.unaryop_to_ntype[unary_operator[2]], expression ]
+    expression = parse_expression7(stream)
+    if expression:
+        # TODO refactor this awful rollback
+        checkpoint = stream["position"]
+        operator = parse_token(stream, value="..") or parse_token(stream, value="^")
+        if operator:
+            right = parse_expression6(stream)
+            if right:
+                return [ None, node.binaryop_to_ntype[operator[2]], expression, right ]
+        stream["position"] = checkpoint
+        return expression
+
+def parse_unary_operator(stream):
+    """
+        unary_operator
+        = "not"
+        | "+"
+        | "-"
+    """
+    return (parse_token(stream, value="not")
+        or parse_token(stream, value="+")
+        or parse_token(stream, value="-")
+    )
+
+@parser
+def parse_expression7(stream):
+    """
+    expression7
+        = "..." ^ spreadable
+        | spreadable
+        | atom
+    """
+    if parse_token(stream, value="..."):
+        spreadable = must(parse_spreadable(stream))
+        return [ None, node.ntype_spread, spreadable ]
+    return parse_spreadable(stream) or parse_atom(stream)
+
+@parser
+def parse_spreadable(stream):
+    """
+    spreadable
+        = "(" ^ expression ")" { { path } call }
+        | <ident> { { path } call }
+    """
+    expression = parse_token(stream, ntype=node.ntype_ident)
+    if not expression and parse_token(stream, value="("):
+        expression = must(parse_expression(stream))
+        must(parse_token(stream, value=")"))
+    if expression:
+        path = parse_path(stream)
+        while path:
+            expression = [ None, node.ntype_path, expression, path ]
+            path = parse_path(stream)
+        call = parse_call(stream)
+        while call:
+            expression = [ None, node.ntype_call, expression, *call ]
+            path = parse_path(stream)
+            while path:
+                expression = [ None, node.ntype_path, expression, path ]
+                path = parse_path(stream)
+            call = parse_call(stream)
+        return expression
 
 @parser
 def parse_path(stream):
     """
     path
         = "." ^ <ident>
-        | "[" ".." ^ expression "]"
-        | "[" ^ expression [ ".." ] "]"
+        | "[" ".." ^ ( spreadable | <number> ) "]"
+        | "[" open_range2 "]"
+        | "[" ^ expression "]"
     """
     if parse_token(stream, value="."):
         return must(parse_token(stream, ntype=node.ntype_ident))
+    checkpoint = stream["position"]
     if parse_token(stream, value="["):
         if parse_token(stream, value=".."):
-            expression = must(parse_expression(stream))
+            top = must(parse_spreadable(stream) or parse_token(stream, ntype=node.ntype_number))
             must(parse_token(stream, value="]"))
-            return [ None, node.ntype_range, None, expression ]
+            return [ None, node.ntype_range, None, top ]
+        bottom = parse_spreadable(stream) or parse_token(stream, ntype=node.ntype_number)
+        if bottom and parse_token(stream, value="..") and parse_token(stream, value="]"):
+            return [ None, node.ntype_range, bottom, None ]
+    stream["position"] = checkpoint
+    if parse_token(stream, value="["):
         expression = must(parse_expression(stream))
-        if parse_token(stream, value=".."):
-            must(parse_token(stream, value="]"))
-            return [ None, node.ntype_range, expression ]
         must(parse_token(stream, value="]"))
         return expression
 
