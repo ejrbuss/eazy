@@ -122,7 +122,9 @@ def parse_binary_operator(left_parser, operator_parser, right_parser):
         if left:
             operator = operator_parser(ctx)
             while operator:
-                right = must(right_parser)(ctx)
+                right = right_parser(ctx)
+                if not right:
+                    return None
                 left = Node(binary_operators[operator.value], left, right)
                 operator = operator_parser(ctx)
             return left

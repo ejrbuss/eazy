@@ -1,544 +1,898 @@
-from .. import parser
-from .. import tokenizer
-from .. import node
+from ..parser import parse
+from ..tokenizer import tokenize
+from ..node import Node, NodeType
 
 def test_parse_module():
-    ast = parser.parse(tokenizer.tokenize(""))
-    assert node.simplify_node(ast) == [ node.ntype_module ]
+    assert parse(tokenize("")) == Node(NodeType.module)
 
-def test_parse_statements():
-    ast = parser.parse(tokenizer.tokenize("a ; b"))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_ident, "a" ],
-        [ node.ntype_ident, "b" ], 
-    ]
-    ast = parser.parse(tokenizer.tokenize("a ; b \n c"))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_ident, "a" ],
-        [ node.ntype_ident, "b" ], 
-        [ node.ntype_ident, "c" ],
-    ]
+def test_parse_statments():
+    assert parse(tokenize("a")) == Node(NodeType.module,
+        Node(NodeType.identifier, "a")
+    )
+    assert parse(tokenize("a ; b")) == Node(NodeType.module,
+        Node(NodeType.identifier, "a"),
+        Node(NodeType.identifier, "b"),
+    )
+    assert parse(tokenize("a \n b")) == Node(NodeType.module,
+        Node(NodeType.identifier, "a"),
+        Node(NodeType.identifier, "b"),
+    )
 
-def test_parse_var():
-    ast = parser.parse(tokenizer.tokenize("var pi = 3.14"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_var,
-            [ node.ntype_ident, "pi" ],
-            [ node.ntype_number, 3.14 ],
+def test_parse_declaration():
+    assert parse(tokenize("var a = b")) == Node(NodeType.module,
+        Node(NodeType.declare, 
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
             None,
-        ]
-    ]
-
-def test_parse_return():
-    ast = parser.parse(tokenizer.tokenize("return 4"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_return, [ node.ntype_number, 4 ], ]
-    ]
-
-def test_parse_yield():
-    ast = parser.parse(tokenizer.tokenize("yield 4"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_yield, [ node.ntype_number, 4 ], ]
-    ]
-
-def test_parse_extend():
-    ast = parser.parse(tokenizer.tokenize("extend x"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_extend, [ node.ntype_ident, "x" ] ]
-    ]
-
-def test_parse_throw():
-    ast = parser.parse(tokenizer.tokenize("throw x"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_throw, [ node.ntype_ident, "x" ] ],
-    ]
-
-def test_parse_assign():
-    ast = parser.parse(tokenizer.tokenize("x = 4"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_assign,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_number, 4 ],
-        ]
-    ]
-
-def test_parse_spread():
-    ast = parser.parse(tokenizer.tokenize("...data"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_spread,
-            [ node.ntype_ident, "data" ],
-        ]
-    ]
-
-def test_parse_ident():
-    ast = parser.parse(tokenizer.tokenize("identifier"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_ident, "identifier" ],
-    ]
-
-def test_parse_string():
-    ast = parser.parse(tokenizer.tokenize("\"string\""))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_string, "string" ],
-    ]
-
-def test_parse_number():
-    ast = parser.parse(tokenizer.tokenize("42"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_number, 42 ],
-    ]
-
-def test_parse_list():
-    ast = parser.parse(tokenizer.tokenize("List [ 1, 2, 3 ]"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_list,
-            [ node.ntype_number, 1 ],
-            [ node.ntype_number, 2 ],
-            [ node.ntype_number, 3 ],
-        ]
-    ]
-
-def test_parse_map():
-    ast = parser.parse(tokenizer.tokenize("Map [ x, y: 2, ['3']: 3 ]"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_map,
-            [ node.ntype_pair, [ node.ntype_ident, "x" ], None ],
-            [ node.ntype_pair, [ node.ntype_ident, "y" ], [ node.ntype_number, 2 ] ],
-            [ node.ntype_pair, [ node.ntype_string, "3" ], [ node.ntype_number, 3 ] ],
-
-        ]
-    ]
-
-def test_parse_funcntion():
-    ast = parser.parse(tokenizer.tokenize("Function {}"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_function,
-            [ node.ntype_case,
-                None,
-                None,
-                [ node.ntype_block ],
-            ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("Function { x, y -> z }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_function,
-            [ node.ntype_case, 
-                [ node.ntype_patterns ,
-                    [ node.ntype_ident, "x"],
-                    [ node.ntype_ident, "y"],
-                ],
-                None,
-                [ node.ntype_block,
-                    [ node.ntype_ident, "z" ],
-                ],      
-            ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("Function { w => x, y if condition => z }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_function,
-            [ node.ntype_case, 
-                [ node.ntype_patterns,
-                    [ node.ntype_ident, "w"],
-                ],
-                None,
-                [ node.ntype_ident, "x" ],
-            ],
-            [ node.ntype_case,
-                [ node.ntype_patterns, 
-                    [ node.ntype_ident, "y" ],
-                ],
-                [ node.ntype_ident, "condition" ],
-                [ node.ntype_ident, "z" ],
-            ]
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("Function { body }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_function,
-            [ node.ntype_case, 
-                None,
-                None,
-                [ node.ntype_block,
-                    [ node.ntype_ident, "body" ],
-                ],      
-            ],
-        ],
-    ]
-
-def test_parse_generator():
-    ast = parser.parse(tokenizer.tokenize("Generator {}"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_generator, 
-            [ node.ntype_case,
-                None,
-                None,
-                [ node.ntype_block ]
-            ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("Generator { x, List [ y, z ] -> return x }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_generator,
-            [ node.ntype_case, 
-                [ node.ntype_patterns,
-                    [ node.ntype_ident, "x" ],
-                    [ node.ntype_list, 
-                        [ node.ntype_ident, "y" ],
-                        [ node.ntype_ident, "z" ],
-                    ],
-                ],
-                None,
-                [ node.ntype_block,
-                    [ node.ntype_return,
-                        [ node.ntype_ident, "x" ],
-                    ],
-                ],      
-            ],
-        ]
-    ]
-    ast = parser.parse(tokenizer.tokenize("Generator { x, y -> z; w }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_generator, 
-            [ node.ntype_case,
-                [ node.ntype_patterns,
-                    [ node.ntype_ident, "x" ],
-                    [ node.ntype_ident, "y" ],
-                ],
-                None,
-                [ node.ntype_block,
-                    [ node.ntype_ident, "z" ],
-                    [ node.ntype_ident, "w" ],
-                ],
-            ],
-        ],
-    ]
-
-def test_parse_if():
-    ast = parser.parse(tokenizer.tokenize("if x then { True }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_if,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_block, [ node.ntype_boolean, True ] ],
+        ),
+    )
+    assert parse(tokenize("var List [ a ] = b + c")) == Node(NodeType.module,
+        Node(NodeType.declare, 
+            Node(NodeType.listexp,
+                Node(NodeType.identifier, "a"),
+            ),
+            Node(NodeType.addexp,
+                Node(NodeType.identifier, "b"),
+                Node(NodeType.identifier, "c"),
+            ),
             None,
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("if x then { True } else { False }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_if,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_block, [ node.ntype_boolean, True ] ],
-            [ node.ntype_block, [ node.ntype_boolean, False ] ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("if x then { True } else if y then { False }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_if,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_block, [ node.ntype_boolean, True ] ],
-            [ node.ntype_if,
-                [ node.ntype_ident, "y" ],
-                [ node.ntype_block, [ node.ntype_boolean, False ] ],
+        ),
+    )
+    assert parse(tokenize("--comment\nvar a = b")) == Node(NodeType.module,
+        Node(NodeType.declare, 
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+            Node(NodeType.doc, "comment"),
+        ),
+    )
+    assert parse(tokenize("---\ncomment\n---\nvar a = b")) == Node(NodeType.module,
+        Node(NodeType.declare, 
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+            Node(NodeType.doc, "\ncomment\n"),
+        ),
+    )
+
+def test_parse_range_pattern():
+    assert parse(tokenize("var 1..2 = a")) == Node(NodeType.module,
+        Node(NodeType.declare,
+            Node(NodeType.rangeexp,
+                Node(NodeType.number, 1),
+                Node(NodeType.number, 2),
+            ),
+            Node(NodeType.identifier, "a"),
+            None,
+        ),
+    )
+    assert parse(tokenize("var 1.. = a")) == Node(NodeType.module,
+        Node(NodeType.declare,
+            Node(NodeType.rangeexp,
+                Node(NodeType.number, 1),
                 None,
-            ],
-        ],
-    ]
-
-
-def test_parse_do():
-    ast = parser.parse(tokenizer.tokenize("do { x }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_block, [ node.ntype_ident, "x" ] ]
-    ]
-
-def test_parse_while():
-    ast = parser.parse(tokenizer.tokenize("while x do { y }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_while, 
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_block, [ node.ntype_ident, "y" ] ], 
-        ],
-    ]
-
-def test_ntype_match():
-    ast = parser.parse(tokenizer.tokenize("match x with { y if z => w, else => 5 }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_match,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_case,
-                [ node.ntype_patterns, 
-                    [ node.ntype_ident, "y" ], 
-                ],
-                [ node.ntype_ident, "z" ],
-                [ node.ntype_ident, "w" ],
-            ],
-            [ node.ntype_case, 
-                [ node.ntype_patterns,
-                    [ node.ntype_else, "else" ],
-                ],
+            ),
+            Node(NodeType.identifier, "a"),
+            None,
+        ),
+    )
+    assert parse(tokenize("var ..2 = a")) == Node(NodeType.module,
+        Node(NodeType.declare,
+            Node(NodeType.rangeexp,
                 None,
-                [ node.ntype_number, 5 ],
-            ], 
-        ],
-    ]
+                Node(NodeType.number, 2),
+            ),
+            Node(NodeType.identifier, "a"),
+            None,
+        ),
+    )
 
-def test_parse_for():
-    ast = parser.parse(tokenizer.tokenize("for x in y do { z }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_for,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_ident, "y" ],
+def test_parse_spread_pattern():
+    assert parse(tokenize("var ...a = b")) == Node(NodeType.module,
+        Node(NodeType.declare,
+            Node(NodeType.spreadexp,
+                Node(NodeType.identifier, "a"),
+            ),
+            Node(NodeType.identifier, "b"),
             None,
-            None,
-            [ node.ntype_block, [ node.ntype_ident, "z" ] ],
-        ]
-    ]
-    ast = parser.parse(tokenizer.tokenize("for x in y if x do { z }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_for,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_ident, "y" ],
-            [ node.ntype_ident, "x" ],
-            None,
-            [ node.ntype_block, [ node.ntype_ident, "z" ] ],
-        ]
-    ]
-    ast = parser.parse(tokenizer.tokenize("for x in y if x while z do { z }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_for,
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_ident, "y" ],
-            [ node.ntype_ident, "x" ],
-            [ node.ntype_ident, "z" ],
-            [ node.ntype_block, [ node.ntype_ident, "z" ] ],
-        ]
-    ]
+        ),
+    )
 
-def test_parse_class():
-    ast = parser.parse(tokenizer.tokenize("Class { x -> y }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_class,
-            [ node.ntype_function,
-                [ node.ntype_case, 
-                    [ node.ntype_patterns, 
-                        [ node.ntype_ident, "x" ],
-                    ],
-                    None,
-                    [ node.ntype_block, [ node.ntype_ident, "y" ] ],
-                ],
-            ],
-        ],
-    ]
+def test_parse_else_pattern():
+    assert parse(tokenize("var else = a")) == Node(NodeType.module,
+        Node(NodeType.declare,
+            Node(NodeType.elsepat),
+            Node(NodeType.identifier, "a"),
+            None,
+        )
+    )
+
+def test_parse_list_literal():
+    assert parse(tokenize("List []")) == Node(NodeType.module,
+        Node(NodeType.listexp),
+    )
+    assert parse(tokenize("List [ 1, 2, 3 ]")) == Node(NodeType.module,
+        Node(NodeType.listexp,
+            Node(NodeType.number, 1),
+            Node(NodeType.number, 2),
+            Node(NodeType.number, 3),
+        ),
+    )
+    assert parse(tokenize("List [ 1, 2, 3, ...a ]")) == Node(NodeType.module,
+        Node(NodeType.listexp,
+            Node(NodeType.number, 1),
+            Node(NodeType.number, 2),
+            Node(NodeType.number, 3),
+            Node(NodeType.spreadexp, 
+                Node(NodeType.identifier, "a"),
+            ),
+        ),
+    )
+
+def test_parse_map_literal():
+    assert parse(tokenize("Map []")) == Node(NodeType.module,
+        Node(NodeType.mapexp),
+    )
+    assert parse(tokenize("Map [ a: b, c ]")) == Node(NodeType.module,
+        Node(NodeType.mapexp,
+            Node(NodeType.pair, 
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.pair,
+                Node(NodeType.identifier, "c"),
+                None,
+            ),
+        ),
+    )
+    assert parse(tokenize("Map [ a: b, c, ...d ]")) == Node(NodeType.module,
+        Node(NodeType.mapexp,
+            Node(NodeType.pair, 
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.pair,
+                Node(NodeType.identifier, "c"),
+                None,
+            ),
+            Node(NodeType.spreadexp,
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
+    assert parse(tokenize("Map [ a: b, c, ...d, [e]: f, ]")) == Node(NodeType.module,
+        Node(NodeType.mapexp,
+            Node(NodeType.pair, 
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.pair,
+                Node(NodeType.identifier, "c"),
+                None,
+            ),
+            Node(NodeType.spreadexp,
+                Node(NodeType.identifier, "d"),
+            ),
+            Node(NodeType.pair,
+                Node(NodeType.identifier, "e"),
+                Node(NodeType.identifier, "f"),
+            ),
+        ),
+    )
+
+def test_parse_literal():
+    assert parse(tokenize("List [ Nothing, True, 42, \"string\" ]")) == Node(NodeType.module,
+        Node(NodeType.listexp,
+            Node(NodeType.nothing, None),
+            Node(NodeType.boolean, True),
+            Node(NodeType.number, 42),
+            Node(NodeType.string, "string"),
+        )
+    )
+
+def test_parse_return_statement():
+    assert parse(tokenize("return a")) == Node(NodeType.module,
+        Node(NodeType.returns,
+            Node(NodeType.identifier, "a"),
+        ),
+    )
+
+def test_parse_yield_statement():
+    assert parse(tokenize("yield a")) == Node(NodeType.module,
+        Node(NodeType.yields,
+            Node(NodeType.identifier, "a"),
+        ),
+    )
+
+def test_parse_extend_statement():
+    assert parse(tokenize("extend a")) == Node(NodeType.module,
+        Node(NodeType.extends,
+            Node(NodeType.identifier, "a"),
+        ),
+    )
+
+def test_parse_throw_statement():
+    assert parse(tokenize("throw a")) == Node(NodeType.module,
+        Node(NodeType.throws,
+            Node(NodeType.identifier, "a"),
+        ),
+    )
+
+def test_parse_assignment():
+    assert parse(tokenize("a = b")) == Node(NodeType.module,
+        Node(NodeType.assign,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b")
+        ),
+    )
+
+def test_parse_if_expression():
+    assert parse(tokenize("if a then { b }")) == Node(NodeType.module,
+        Node(NodeType.ifexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.block,
+                Node(NodeType.identifier, "b"),
+            ),
+            None,
+        ),
+    )
+    assert parse(tokenize("if a then { b } else { c }")) == Node(NodeType.module,
+        Node(NodeType.ifexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.block,
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.block,
+                Node(NodeType.identifier, "c"),
+            ),
+        ),
+    )
+    assert parse(tokenize("if a then { b } else if c then { d }")) == Node(NodeType.module,
+        Node(NodeType.ifexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.block,
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.ifexp,
+                Node(NodeType.identifier, "c"),
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "d"),
+                ),
+                None,
+            ),
+        ),
+    )
+
+def test_parse_do_expression():
+    assert parse(tokenize("do { a }")) == Node(NodeType.module,
+        Node(NodeType.block,
+            Node(NodeType.identifier, "a")
+        ),
+    )
+
+def test_parse_while_expression():
+    assert parse(tokenize("while a do { b }")) == Node(NodeType.module,
+        Node(NodeType.whileexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.block,
+                Node(NodeType.identifier, "b"),
+            ),
+        ),
+    )
+
+def test_parse_match_expression():
+    assert parse(tokenize("match a with {}")) == Node(NodeType.module,
+        Node(NodeType.matchexp,
+            Node(NodeType.identifier, "a"),
+        ),
+    )
+    assert parse(tokenize("match a with { b => c }")) == Node(NodeType.module,
+        Node(NodeType.matchexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "b"),
+                ),
+                None,
+                Node(NodeType.block, 
+                    Node(NodeType.identifier, "c"),
+                ),
+            ),
+        ),
+    )
+    assert parse(tokenize("match a with { b => c, d, e if f => g }")) == Node(NodeType.module,
+        Node(NodeType.matchexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "b"),
+                ),
+                None,
+                Node(NodeType.block, 
+                    Node(NodeType.identifier, "c"),
+                ),
+            ),
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "d"),
+                    Node(NodeType.identifier, "e"),
+                ),
+                Node(NodeType.identifier, "f"),
+                Node(NodeType.block, 
+                    Node(NodeType.identifier, "g"),
+                ),
+            ),
+        ),
+    )
+
+def test_parse_for_expression():
+    assert parse(tokenize("for a in b do {}")) == Node(NodeType.module,
+        Node(NodeType.forexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+            None,
+            None,
+            Node(NodeType.block),
+        ),
+    )
+    assert parse(tokenize("for a in b if c do { d }")) == Node(NodeType.module,
+        Node(NodeType.forexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+            Node(NodeType.identifier, "c"),
+            None,
+            Node(NodeType.block,
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
+    assert parse(tokenize("for a in b if c while d do { e }")) == Node(NodeType.module,
+        Node(NodeType.forexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+            Node(NodeType.identifier, "c"),
+            Node(NodeType.identifier, "d"),
+            Node(NodeType.block,
+                Node(NodeType.identifier, "e"),
+            ),
+        ),
+    )
+
+def test_parse_class_expression():
+    assert parse(tokenize("Class {}")) == Node(NodeType.module,
+        Node(NodeType.classexp,
+            Node(NodeType.case,
+                None,
+                None,
+                Node(NodeType.block),
+            ),
+        ),
+    )
+    assert parse(tokenize("Class { a -> b }")) == Node(NodeType.module,
+        Node(NodeType.classexp,
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "a"),
+                ),
+                None,
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "b"),
+                ),
+            ),
+        ),
+    )
+    assert parse(tokenize("Class { a, b -> c }")) == Node(NodeType.module,
+        Node(NodeType.classexp,
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "a"),
+                    Node(NodeType.identifier, "b"),
+                ),
+                None,
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "c"),
+                ),
+            ),
+        ),
+    )
 
 def test_parse_try_expression():
-    ast = parser.parse(tokenizer.tokenize("try { x } catch { y -> z }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_try,
-            [ node.ntype_block, 
-                [ node.ntype_ident, "x" ] 
-            ],
-            [ node.ntype_function,
-                [ node.ntype_case,
-                    [ node.ntype_patterns,
-                        [ node.ntype_ident, "y" ]
-                    ],
-                    None,
-                    [ node.ntype_block,
-                        [ node.ntype_ident, "z" ],
-                    ],
-                ],
-            ],
+    assert parse(tokenize("try { a } catch { b }")) == Node(NodeType.module,
+        Node(NodeType.tryexp,
+            Node(NodeType.block,
+                Node(NodeType.identifier, "a"),
+            ),
+            Node(NodeType.case,
+                None,
+                None,
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "b"),
+                ),
+            ),
             None,
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("try { x } catch { y -> z } finally { 99 }"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_try,
-            [ node.ntype_block, 
-                [ node.ntype_ident, "x" ] 
-            ],
-            [ node.ntype_function,
-                [ node.ntype_case,
-                    [ node.ntype_patterns,
-                        [ node.ntype_ident, "y" ]
-                    ],
-                    None,
-                    [ node.ntype_block,
-                        [ node.ntype_ident, "z" ],
-                    ],
-                ],
-            ],
-            [ node.ntype_block,
-                [ node.ntype_number, 99 ],
-            ],
-        ],
-    ]
+        ),
+    )
+    assert parse(tokenize("try { a } catch { b } finally { c }")) == Node(NodeType.module,
+        Node(NodeType.tryexp,
+            Node(NodeType.block,
+                Node(NodeType.identifier, "a"),
+            ),
+            Node(NodeType.case,
+                None,
+                None,
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "b"),
+                ),
+            ),
+            Node(NodeType.block,
+                Node(NodeType.identifier, "c"),
+            ),
+        ),
+    )
+
+def test_parse_function():
+    assert parse(tokenize("Function {}")) == Node(NodeType.module,
+        Node(NodeType.function,
+            Node(NodeType.case,
+                None,
+                None,
+                Node(NodeType.block),
+            ),
+        ),
+    )
+    assert parse(tokenize("Function { a -> }")) == Node(NodeType.module,
+        Node(NodeType.function,
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "a")
+                ),
+                None,
+                Node(NodeType.block),
+            ),
+        ),
+    )
+    assert parse(tokenize("Function { a, b -> c }")) == Node(NodeType.module,
+        Node(NodeType.function,
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "a"),
+                    Node(NodeType.identifier, "b"),
+                ),
+                None,
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "c"),
+                ),
+            ),
+        ),
+    )
+    assert parse(tokenize("Function { a, b => c, d if e => f, }")) == Node(NodeType.module,
+        Node(NodeType.function,
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "a"),
+                    Node(NodeType.identifier, "b"),
+                ),
+                None,
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "c"),
+                ),
+            ),
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "d"),
+                ),
+                Node(NodeType.identifier, "e"),
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "f"),
+                ),
+            ),
+        ),
+    )
+
+def test_parse_generator():
+    assert parse(tokenize("Generator {}")) == Node(NodeType.module,
+        Node(NodeType.generator,
+            Node(NodeType.case,
+                None,
+                None,
+                Node(NodeType.block),
+            ),
+        ),
+    )
+    assert parse(tokenize("Generator { a, b -> c\nd }")) == Node(NodeType.module,
+        Node(NodeType.generator,
+            Node(NodeType.case,
+                Node(NodeType.patterns,
+                    Node(NodeType.identifier, "a"),
+                    Node(NodeType.identifier, "b"),
+                ),
+                None,
+                Node(NodeType.block,
+                    Node(NodeType.identifier, "c"),
+                    Node(NodeType.identifier, "d"),
+                ),
+            ),
+        ),
+    )
 
 def test_parse_or_expression():
-    ast = parser.parse(tokenizer.tokenize("a or b or c"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_or,
-            [ node.ntype_or, 
-                [ node.ntype_ident, "a" ],
-                [ node.ntype_ident, "b" ],
-            ],
-            [ node.ntype_ident, "c" ],
-        ],
-    ]
+    assert parse(tokenize("a or b")) == Node(NodeType.module,
+        Node(NodeType.orexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a or b or c")) == Node(NodeType.module,
+        Node(NodeType.orexp,
+            Node(NodeType.orexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.identifier, "c"),
+        ),
+    )
 
 def test_parse_and_expression():
-    ast = parser.parse(tokenizer.tokenize("a and b and c"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_and,
-            [ node.ntype_and, 
-                [ node.ntype_ident, "a" ],
-                [ node.ntype_ident, "b" ],
-            ],
-            [ node.ntype_ident, "c" ],
-        ],
-    ]
+    assert parse(tokenize("a and b")) == Node(NodeType.module,
+        Node(NodeType.andexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a and b and c")) == Node(NodeType.module,
+        Node(NodeType.andexp,
+            Node(NodeType.andexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.identifier, "c"),
+        ),
+    )
+    assert parse(tokenize("a and b or c and d")) == Node(NodeType.module,
+        Node(NodeType.orexp,
+            Node(NodeType.andexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.andexp,
+                Node(NodeType.identifier, "c"),
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
 
-def test_parse_comparison_expression():
-    ast = parser.parse(tokenizer.tokenize("""
-        a /= b == c is not d is e < f <= g > h >= i in j not in k
-    """))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_notin,
-            [ node.ntype_in,
-                [ node. ntype_gte, 
-                    [ node.ntype_gt,
-                        [ node.ntype_lte,
-                            [ node.ntype_lt,
-                                [ node.ntype_is,
-                                    [ node.ntype_isnot, 
-                                        [ node.ntype_eq,
-                                            [ node.ntype_neq,
-                                                [ node.ntype_ident, "a" ],
-                                                [ node.ntype_ident, "b" ],
-                                            ],
-                                            [ node.ntype_ident, "c" ],
-                                        ],
-                                        [ node.ntype_ident, "d" ],
-                                    ],
-                                    [ node.ntype_ident, "e" ],
-                                ],
-                                [ node.ntype_ident, "f" ],
-                            ],
-                            [ node.ntype_ident, "g" ],
-                        ],
-                        [ node.ntype_ident, "h" ],
-                    ],
-                    [ node.ntype_ident, "i" ],
-                ],
-                [ node.ntype_ident, "j"],
-            ],
-            [ node.ntype_ident, "k" ],
-        ],
-    ]
+def test_parse_relational_expression():
+    assert parse(tokenize("a /= b")) == Node(NodeType.module,
+        Node(NodeType.neqexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a /= b == c is not d is e < f <= g > h >= i not in j in k")) == Node(NodeType.module,
+        Node(NodeType.inexp,
+            Node(NodeType.notinexp,
+                Node(NodeType.gteexp,
+                    Node(NodeType.gtexp,
+                        Node(NodeType.lteexp,
+                            Node(NodeType.ltexp,
+                                Node(NodeType.isexp,
+                                    Node(NodeType.isnotexp,
+                                        Node(NodeType.eqexp,
+                                            Node(NodeType.neqexp,
+                                                Node(NodeType.identifier, "a"),
+                                                Node(NodeType.identifier, "b"),
+                                            ),
+                                            Node(NodeType.identifier, "c"),
+                                        ),
+                                        Node(NodeType.identifier, "d"),
+                                    ),
+                                    Node(NodeType.identifier, "e"),
+                                ),
+                                Node(NodeType.identifier, "f"),
+                            ),
+                            Node(NodeType.identifier, "g"),
+                        ),
+                        Node(NodeType.identifier, "h"),
+                    ),
+                    Node(NodeType.identifier, "i"),
+                ),
+                Node(NodeType.identifier, "j"),
+            ),
+            Node(NodeType.identifier, "k"),
+        ),
+    )
+    assert parse(tokenize("a in b and c is not d")) == Node(NodeType.module,
+        Node(NodeType.andexp,
+            Node(NodeType.inexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.isnotexp,
+                Node(NodeType.identifier, "c"),
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
 
-def test_add_and_sub():
-    ast = parser.parse(tokenizer.tokenize("a + b - c"))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_sub,
-            [ node.ntype_add,
-                [ node.ntype_ident, "a" ],
-                [ node.ntype_ident, "b" ],  
-            ],
-            [ node.ntype_ident, "c" ],
-        ],
-    ]
+def test_parse_additive_expression():
+    assert parse(tokenize("a + b")) == Node(NodeType.module,
+        Node(NodeType.addexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a + b - c")) == Node(NodeType.module,
+        Node(NodeType.subexp,
+            Node(NodeType.addexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.identifier, "c"),
+        ),
+    )
+    assert parse(tokenize("a + b <= c - d")) == Node(NodeType.module,
+        Node(NodeType.lteexp,
+            Node(NodeType.addexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.subexp,
+                Node(NodeType.identifier, "c"),
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
 
-def test_mul_and_div():
-    ast = parser.parse(tokenizer.tokenize("a * b / c"))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_div,
-            [ node.ntype_mul,
-                [ node.ntype_ident, "a" ],
-                [ node.ntype_ident, "b" ],
-            ],
-            [ node.ntype_ident, "c" ],
-        ],
-    ]
+def test_parse_multiplicative_expression():
+    assert parse(tokenize("a * b")) == Node(NodeType.module,
+        Node(NodeType.mulexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a * b / c")) == Node(NodeType.module,
+        Node(NodeType.divexp,
+            Node(NodeType.mulexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.identifier, "c"),
+        ),
+    )
+    assert parse(tokenize("a * b + c / d")) == Node(NodeType.module,
+        Node(NodeType.addexp,
+            Node(NodeType.mulexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.divexp,
+                Node(NodeType.identifier, "c"),
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
 
-def test_not_pos_and_neg():
-    ast = parser.parse(tokenizer.tokenize("not a ; +4 ; -5 "))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_not, 
-            [ node.ntype_ident, "a"],
-        ],
-        [ node.ntype_pos, 
-            [ node.ntype_number, 4 ],
-        ],
-        [ node.ntype_neg, 
-            [ node.ntype_number, 5 ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("a - - b"))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_sub, 
-            [ node.ntype_ident, "a"],
-            [ node.ntype_neg,
-                [ node.ntype_ident, "b" ],
-            ],
-        ],
-    ]
+def test_parse_exponential_expression():
+    assert parse(tokenize("a^b")) == Node(NodeType.module,
+        Node(NodeType.powexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a^b..c")) == Node(NodeType.module,
+        Node(NodeType.powexp,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.rangeexp,
+                Node(NodeType.identifier, "b"),
+                Node(NodeType.identifier, "c"),
+            ),
+        ),
+    )
+    assert parse(tokenize("a ^ b * c .. d")) == Node(NodeType.module,
+        Node(NodeType.mulexp,
+            Node(NodeType.powexp,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.rangeexp,
+                Node(NodeType.identifier, "c"),
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
 
-def test_range_and_pow():
-    ast = parser.parse(tokenizer.tokenize("1..4 ; 2^3^4"))
-    print(node.print_node(ast))
-    assert node.simplify_node(ast) == [ node.ntype_module,
-        [ node.ntype_range,
-            [ node.ntype_number, 1 ],
-            [ node.ntype_number, 4 ],
-        ],
-        [ node.ntype_pow,
-            [ node.ntype_number, 2 ],
-            [ node.ntype_pow,
-                [ node.ntype_number, 3 ],
-                [ node.ntype_number, 4 ],
-            ],  
-        ],
-    ]
+def test_parse_unary_expression():
+    assert parse(tokenize("-a")) == Node(NodeType.module,
+        Node(NodeType.negexp,
+            Node(NodeType.identifier, "a"),
+        ),
+    )
+    assert parse(tokenize("do { -a ; +b ; not c ; ... d }")) == Node(NodeType.module,
+        Node(NodeType.block,
+            Node(NodeType.negexp,
+                Node(NodeType.identifier, "a"),
+            ),
+            Node(NodeType.posexp,
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.notexp,
+                Node(NodeType.identifier, "c"),
+            ),
+            Node(NodeType.spreadexp,
+                Node(NodeType.identifier, "d"),
+            ),
+        ),
+    )
+    assert parse(tokenize("not a ^ +b")) == Node(NodeType.module,
+        Node(NodeType.powexp,
+            Node(NodeType.notexp,
+                Node(NodeType.identifier, "a"),
+            ),
+            Node(NodeType.posexp,
+                Node(NodeType.identifier, "b"),
+            ),
+        ),
+    )
 
-def test_parse_path():
-    ast = parser.parse(tokenizer.tokenize("x.y[1].z[2]"))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_path,
-            [ node.ntype_path, 
-                [ node.ntype_path, 
-                    [ node.ntype_path,
-                        [ node.ntype_ident, "x" ],
-                        [ node.ntype_ident, "y" ],
-                    ],
-                    [ node.ntype_number, 1 ],
-                ],
-                [ node.ntype_ident, "z" ],
-            ],
-            [ node.ntype_number, 2 ],
-        ],
-    ]
-    ast = parser.parse(tokenizer.tokenize("x[a..n][1..][..c]"))
-    print(node.print_node(ast))
-    assert node.simplify_node(ast) == [ node.ntype_module, 
-        [ node.ntype_path,
-            [ node.ntype_path, 
-                [ node.ntype_path,
-                    [ node.ntype_ident, "x" ],
-                    [ node.ntype_range,
-                        [ node.ntype_ident, "a" ],
-                        [ node.ntype_ident, "n" ],
-                    ]
-                ],
-                [ node.ntype_range,
-                    [ node.ntype_number, 1],
-                    None,
-                ]
-            ],
-            [ node.ntype_range,
+def test_parse_calls():
+    assert parse(tokenize("a()")) == Node(NodeType.module,
+        Node(NodeType.call,
+            Node(NodeType.identifier, "a"),
+        ),
+    )
+    assert parse(tokenize("a(b, c, d)")) == Node(NodeType.module,
+        Node(NodeType.call,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+            Node(NodeType.identifier, "c"),
+            Node(NodeType.identifier, "d"),
+        ),
+    )
+    assert parse(tokenize("a(b)(c)(d)")) == Node(NodeType.module,
+        Node(NodeType.call,
+            Node(NodeType.call,
+                Node(NodeType.call,
+                    Node(NodeType.identifier, "a"),
+                    Node(NodeType.identifier, "b"),
+                ),
+                Node(NodeType.identifier, "c"),
+            ),
+            Node(NodeType.identifier, "d"),
+        ),
+    )
+    assert parse(tokenize("a.b(c, d, ...e)")) == Node(NodeType.module,
+        Node(NodeType.call,
+            Node(NodeType.access,
+                Node(NodeType.identifier, "a"),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.identifier, "c"),
+            Node(NodeType.identifier, "d"),
+            Node(NodeType.spreadexp,
+                Node(NodeType.identifier, "e"),
+            ),
+        ),
+    )
+
+def test_parse_accesses():
+    assert parse(tokenize("a.b")) == Node(NodeType.module,
+        Node(NodeType.access,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a[b]")) == Node(NodeType.module,
+        Node(NodeType.access,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.identifier, "b"),
+        ),
+    )
+    assert parse(tokenize("a[b..]")) == Node(NodeType.module,
+        Node(NodeType.access,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.rangeexp,
+                Node(NodeType.identifier, "b"),
                 None,
-                [ node.ntype_ident, "c" ],
-            ]
-        ],
-    ]
+            ),
+        ),
+    )
+    assert parse(tokenize("a[..b]")) == Node(NodeType.module,
+        Node(NodeType.access,
+            Node(NodeType.identifier, "a"),
+            Node(NodeType.rangeexp,
+                None,
+                Node(NodeType.identifier, "b"),
+            ),
+        ),
+    )
+    assert parse(tokenize("a.b[c]().d")) == Node(NodeType.module,
+        Node(NodeType.access,
+            Node(NodeType.call,
+                Node(NodeType.access,
+                    Node(NodeType.access,
+                        Node(NodeType.identifier, "a"),
+                        Node(NodeType.identifier, "b"),
+                    ),
+                    Node(NodeType.identifier, "c"),
+                ),
+            ),
+            Node(NodeType.identifier, "d"),
+        ),
+    )
 
+def test_parse_simple_expressions():
+    assert parse(tokenize("(a)")) == Node(NodeType.module,
+        Node(NodeType.identifier, "a"),
+    )
+    assert parse(tokenize("(a + b).b in c")) == Node(NodeType.module,
+        Node(NodeType.inexp,
+            Node(NodeType.access,
+                Node(NodeType.addexp,
+                    Node(NodeType.identifier, "a"),
+                    Node(NodeType.identifier, "b"),
+                ),
+                Node(NodeType.identifier, "b"),
+            ),
+            Node(NodeType.identifier, "c"),
+        ),
+    )
+
+def test_parse_program():
+    assert parse(tokenize("""
+    var Map [ handle_arguments, handle_program ] = import("./mylib")
+
+    var main = Function { ...args ->
+        options = handle_arguments(args)
+        print(options)
+        return handle_program(options)
+    }
+    """)) == Node(NodeType.module,
+        Node(NodeType.declare,
+            Node(NodeType.mapexp,
+                Node(NodeType.pair,
+                    Node(NodeType.identifier, "handle_arguments"),
+                    None,
+                ), 
+                Node(NodeType.pair,
+                    Node(NodeType.identifier, "handle_program"),
+                    None,
+                ),
+            ),
+            Node(NodeType.call,
+                Node(NodeType.identifier, "import"),
+                Node(NodeType.string, "./mylib"),
+            ),
+            None,
+        ), 
+        Node(NodeType.declare,
+            Node(NodeType.identifier, "main"),
+            Node(NodeType.function,
+                Node(NodeType.case,
+                    Node(NodeType.patterns,
+                        Node(NodeType.spreadexp,
+                            Node(NodeType.identifier, "args"),
+                        ),
+                    ),
+                    None,
+                    Node(NodeType.block,
+                        Node(NodeType.assign,
+                            Node(NodeType.identifier, "options"),
+                            Node(NodeType.call,
+                                Node(NodeType.identifier, "handle_arguments"),
+                                Node(NodeType.identifier, "args"),
+                            ),
+                        ),
+                        Node(NodeType.call,
+                            Node(NodeType.identifier, "print"),
+                            Node(NodeType.identifier, "options"),
+                        ),
+                        Node(NodeType.returns,
+                            Node(NodeType.call,
+                                Node(NodeType.identifier, "handle_program"),
+                                Node(NodeType.identifier, "options"),
+                            ),
+                        ),
+                    ),
+                ),
+            ), 
+            None,
+        ),
+    )

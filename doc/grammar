@@ -26,8 +26,8 @@ pattern
     | <identifier>
 
 range_pattern
-    = [ <number> ] ".." <number>
-    | <number> ".."
+    = [ simple_expression ] ".." simple_expression
+    | simple_expression ".."
 
 spread_pattern
     = "..." <identifier>

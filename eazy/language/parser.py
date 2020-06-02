@@ -1,132 +1,58 @@
-from . import node
-
-# TODO 
-# -refactor to make greater use of lookahead rather than always relying on 
-#  rollbacks
-# - Keep track of parser stack in stream (can be managed by decorator and must)
-
+from .parsing import (
+    Stream,
+    ParsingContext,
+    Parser,
+    must,
+    peek_value,
+    parse_value,
+    parse_node_type,
+    parse_many,
+    parse_many_seperated_by,
+    parse_choice,
+    parse_choice_of_values,
+    parse_choice_of_node_types,
+    parse_binary_operator,
+)
+from .node import Node, NodeType, unary_operators
 
 def parse(tokens):
-    return parse_module(stream_of(tokens))
+    stream = Stream(tokens)
+    ctx = ParsingContext(stream)
+    ast = parse_module(ctx)
+    assert stream.done()
+    return ast
 
-def must(node):
-    assert node is not None
-    return node
-
-def many(parse, stream):
-    parts = []
-    part = parse(stream)
-    while part:
-        parts.append(part)
-        part = parse_token(stream, value=",") and parse(stream)
-    return parts
-
-def binary(parse, stream, operators):
+@Parser
+def parse_module(ctx):
     """
-    binary
-        = parse { operators parse }
+    module
+        = statments
     """
-    def parse_operation(stream):
-        for operator in operators:
-            token = parse_token(stream, value=operator)
-            if token:
-                return node.binaryop_to_ntype[token[2]]
+    return Node(NodeType.module, *parse_statements(ctx))
 
-    left = parse(stream)
-    if left:
-        operation = parse_operation(stream)
-        while operation:
-            right = must(parse(stream))
-            left = [ None, operation, left, right ]
-            operation = parse_operation(stream)
-        return left
-
-def stream_of(tokens):
-    return {
-        "position": 0,
-        "tokens": tokens
-    }
-
-def stream_position(stream, skip_newlines=True):
-    position = stream["position"]
-    while (position < len(stream["tokens"]) 
-        and skip_newlines 
-        and stream["tokens"][position][2] == "\n"
-    ):
-        position += 1
-    return position
-
-def stream_top(stream, skip_newlines=True):
-    position = stream_position(stream, skip_newlines)
-    if position < len(stream["tokens"]):
-        return stream["tokens"][position]
-    return None
-
-def stream_chomp(stream, skip_newlines=True):
-    token = stream_top(stream, skip_newlines)
-    position = stream_position(stream, skip_newlines)
-    stream["position"] = position + 1
-    return token
-
-def stream_done(stream):
-    return stream_top(stream) is None
-
-def peek_token(stream, ntype=None, value=None):
-    skip_newlines = ntype != node.ntype_terminator
-    token = stream_top(stream, skip_newlines)
-    if not token:
-        return None
-    _, token_ntype, token_value = token
-    if ntype and token_ntype != ntype:
-        return None
-    if value and token_value != value:
-        return None
-    return True
-
-def parse_token(stream, ntype=None, value=None):
-    if peek_token(stream, ntype, value):
-        skip_newlines = ntype != node.ntype_terminator
-        return stream_chomp(stream, skip_newlines)
-
-def parser(function):
-    def wrapper(stream):
-        checkpoint = stream["position"]
-        value = function(stream)
-        if not value:
-            stream["position"] = checkpoint
-        return value
-    return wrapper
-
-@parser
-def parse_module(stream):
+@Parser
+def parse_statements(ctx):
     """
-    module 
-        = statements
-    """
-    statements = must(parse_statements(stream))
-    # print(stream_top(stream))
-    assert stream_done(stream)
-    return [ None, node.ntype_module, *statements ]
-
-@parser
-def parse_statements(stream):
-    """
-    statements 
-        = { statement <terminator> }
+    statements
+        = { statement ( <terminator> | <eof> ) }
     """
     statements = []
-    statement = parse_statement(stream)
+    statement = parse_statement(ctx)
     while statement:
-        # print()
-        print("statements:", node.print_node(statement))
-        print("stream:", stream_top(stream))
-        must(parse_token(stream, ntype=node.ntype_terminator) or peek_token(stream, value="}"))
+        # print("statements: ", statements)
+        # print("statement: ", statement)
+        # print("stream: ", ctx.stream)
+        must(parse_choice(
+            parse_node_type(NodeType.terminator, skip_newlines=False),
+            parse_node_type(NodeType.eof),
+            peek_value("}"),
+        ))(ctx)
         statements.append(statement)
-        statement = parse_statement(stream)
+        statement = parse_statement(ctx)
     return statements
 
-@parser
-def parse_statement(stream):
+@Parser
+def parse_statement(ctx):
     """
     statement
         = declaration
@@ -137,141 +63,130 @@ def parse_statement(stream):
         | assignment
         | expression
     """
-    return (parse_declaration(stream)
-        or parse_assignment(stream)
-        or parse_return_statement(stream)
-        or parse_yield_statement(stream)
-        or parse_extend_statement(stream)
-        or parse_throw_statement(stream)
-        or parse_expression(stream)
-    )
+    return parse_choice(
+        parse_declaraction,
+        parse_return_statement,
+        parse_yield_statement,
+        parse_extend_statement,
+        parse_throw_statement,
+        parse_assignment,
+        parse_expression,
+    )(ctx)
 
-@parser
-def parse_declaration(stream):
+@Parser
+def parse_declaraction(ctx):
     """
     declaration
-        = [ <doc> ] "var" ^ pattern "=" expression
+        = [ <doc> ] "var" pattern "=" expression
     """
-    doc = parse_token(stream, ntype=node.ntype_doc)
-    if parse_token(stream, value="var"):
-        pattern = must(parse_pattern(stream))
-        must(parse_token(stream, value="="))
-        expression = must(parse_expression(stream))
-        return [ None, node.ntype_var, pattern, expression, doc ]
+    doc = parse_node_type(NodeType.doc)(ctx)
+    if parse_value("var")(ctx):
+        pattern = must(parse_pattern)(ctx)
+        must(parse_value("="))(ctx)
+        expression = must(parse_expression)(ctx)
+        return Node(NodeType.declare, pattern, expression, doc)
 
-@parser
-def parse_return_statement(stream):
-    """
-    return_statement
-        = "return" ^ expression
-    """
-    if parse_token(stream, value="return"):
-        expression = must(parse_expression(stream))
-        return [ None, node.ntype_return, expression ]
-
-@parser
-def parse_yield_statement(stream):
-    """
-    yield_statement
-        = "yield" ^ expression
-    """
-    if parse_token(stream, value="yield"):
-        expression = must(parse_expression(stream))
-        return [ None, node.ntype_yield, expression ]
-
-@parser
-def parse_extend_statement(stream):
-    """
-    extend_statement
-        = "extend" ^ expression
-    """
-    if parse_token(stream, value="extend"):
-        expression = must(parse_expression(stream))
-        return [ None, node.ntype_extend, expression ]
-
-@parser
-def parse_throw_statement(stream):
-    """
-    throw_expression
-        = "throw" ^ expression [ guard ]
-    """
-    if parse_token(stream, value="throw"):
-        expression = must(parse_expression(stream))
-        return [ None, node.ntype_throw, expression ]
-
-@parser
-def parse_assignment(stream):
-    """
-    assignment
-        = <ident> "=" ^ expression
-    """
-    ident = parse_token(stream, ntype=node.ntype_ident)
-    if ident:
-        if parse_token(stream, value="="):
-            expression = must(parse_expression(stream))
-            return [ None, node.ntype_assign, ident, expression ]
-
-@parser
-def parse_pattern(stream):
+@Parser
+def parse_pattern(ctx):
     """
     pattern
-        = list
-        | map
-        | open_range
-        | atom
-        | "else"
-    """
-    return (parse_list(stream)
-        or parse_map(stream)
-        or parse_open_range(stream)
-        or parse_atom(stream)
-        or parse_token(stream, value="else")
-    )
-
-@parser
-def parse_list(stream):
-    if parse_token(stream, value="List"):
-        if parse_token(stream, value="["):
-            expressions = must(parse_expressions(stream))
-            must(parse_token(stream, value="]"))
-            return [ None, node.ntype_list, *expressions ]
-
-@parser
-def parse_map(stream):
-    if parse_token(stream, value="Map"):
-        if parse_token(stream, value="["):
-            pairs = must(parse_pairs(stream))
-            must(parse_token(stream, value="]"))
-            return [ None, node.ntype_map, *pairs ]
-
-@parser
-def parse_open_range(stream):
-    """
-    open_range
-        = ".." <number>
-        | <number> ".."
-    """
-    if parse_token(stream, value=".."):
-        top = must(parse_token(stream, ntype=node.ntype_number))
-        return [ None, node.ntype_range, None, top ]
-    bottom = parse_token(stream, ntype=node.ntype_number)
-    if bottom and parse_token(stream, value=".."):
-        return [ None, node.ntype_range, bottom, None ]
-
-@parser
-def parse_atom(stream):
-    """
-    atom
-        | [ "..." ^ ] <ident>
+        | range_pattern
+        | spread_pattern
+        | else_pattern
+        | list_literal
+        | map_literal
         | literal
+        | <identifier>
     """
-    if parse_token(stream, value="..."):
-        ident = must(parse_token(stream, ntype=node.ntype_ident))
-        return [ None, node.ntype_spread, ident ]
-    return parse_token(stream, ntype=node.ntype_ident) or parse_literal(stream)
+    return parse_choice(
+        parse_range_pattern,
+        parse_spread_pattern,
+        parse_else_pattern,
+        parse_list_literal,
+        parse_map_literal,
+        parse_literal,
+        parse_node_type(NodeType.identifier),
+    )(ctx)
 
-@parser
-def parse_literal(stream):
+@Parser
+def parse_range_pattern(ctx):
+    """
+    range_pattern
+        = [ simple_expression ] ".." simple_expression
+        | simple_expression ".."
+    """
+    start = parse_simple_expression(ctx)
+    if parse_value("..")(ctx):
+        end = parse_simple_expression(ctx)
+        assert start or end
+        return Node(NodeType.rangeexp, start, end)
+
+@Parser
+def parse_spread_pattern(ctx):
+    """
+    spread_pattern
+        = "..." <identifier>
+    """
+    if parse_value("...")(ctx):
+        identifier = parse_node_type(NodeType.identifier)(ctx)
+        if identifier:
+            return Node(NodeType.spreadexp, identifier)
+
+@Parser
+def parse_else_pattern(ctx):
+    """
+    else_pattern
+        = "else"
+    """
+    if parse_value("else")(ctx):
+        return Node(NodeType.elsepat)
+
+@Parser
+def parse_list_literal(ctx):
+    """
+    list_literal
+        = "List" "[" expressions "]"
+    """
+    if parse_value("List")(ctx) and parse_value("[")(ctx):
+        expressions = parse_expressions(ctx)
+        must(parse_value("]"))(ctx)
+        return Node(NodeType.listexp, *expressions)
+
+@Parser
+def parse_map_literal(ctx):
+    """
+    map_literal
+        = ""Map "[" pairs "]"
+    """
+    if parse_value("Map")(ctx) and parse_value("[")(ctx):
+        pairs = parse_pairs(ctx)
+        must(parse_value("]"))(ctx)
+        return Node(NodeType.mapexp, *pairs)
+
+@Parser
+def parse_pair(ctx):
+    """
+    pair
+        = "..." simple_expression
+        | <identifier> [ ":" expression ]
+        | "[" expression "]" ":" expression
+    """
+    if parse_value("...")(ctx):
+        expression = must(parse_simple_expression)(ctx)
+        return Node(NodeType.spreadexp, expression)
+    key_expression = parse_node_type(NodeType.identifier)(ctx)
+    if key_expression:
+        value_expression = parse_value(":")(ctx) and must(parse_expression)(ctx)
+        return Node(NodeType.pair, key_expression, value_expression or None)
+    if parse_value("[")(ctx):
+        key_expression = must(parse_expression)(ctx)
+        must(parse_value("]"))(ctx)
+        must(parse_value(":"))(ctx)
+        value_expression = must(parse_expression)(ctx)
+        return Node(NodeType.pair, key_expression, value_expression)
+
+@Parser
+def parse_literal(ctx):
     """
     literal
         = <string>
@@ -279,120 +194,80 @@ def parse_literal(stream):
         | <boolean>
         | <nothing>
     """
-    return (parse_token(stream, ntype=node.ntype_ident)
-        or parse_token(stream, ntype=node.ntype_string)
-        or parse_token(stream, ntype=node.ntype_number)
-        or parse_token(stream, ntype=node.ntype_boolean)
-        or parse_token(stream, ntype=node.ntype_nothing)
-    )
+    return parse_choice_of_node_types(
+        NodeType.string,
+        NodeType.number,
+        NodeType.boolean,
+        NodeType.nothing,
+    )(ctx)
 
+@Parser
+def parse_return_statement(ctx):
+    """
+    return_statement
+        = "return" expression
+    """
+    if parse_value("return")(ctx):
+        expression = must(parse_expression)(ctx)
+        return Node(NodeType.returns, expression)
 
-@parser
-def parse_pair(stream):
+@Parser
+def parse_yield_statement(ctx):
     """
-    pair
-        = <ident> [ ":" ^ expression ]
-        | "[" ^ expression "]" ":" expression
+    yield_statement
+        = "yield" expression
     """
-    ident = parse_token(stream, ntype=node.ntype_ident)
-    if ident:
-        expression = None
-        if parse_token(stream, value=":"):
-            expression = must(parse_expression(stream))
-        return [ None, node.ntype_pair, ident, expression ]
-    if parse_token(stream, value = "["):
-        key = must(parse_expression(stream))
-        must(parse_token(stream, value="]"))
-        must(parse_token(stream, value=":"))
-        value = must(parse_expression(stream))
-        return [ None, node.ntype_pair, key, value ]
+    if parse_value("yield")(ctx):
+        expression = must(parse_expression)(ctx)
+        return Node(NodeType.yields, expression)
 
-@parser
-def parse_block(stream):
+@Parser
+def parse_extend_statement(ctx):
     """
-    block
-        = "{" statements "}"
+    extend_statement
+        = "extend" expression
     """
-    if parse_token(stream, value="{"):
-        statements = parse_statements(stream)
-        if parse_token(stream, value="}"):
-            return [ None, node.ntype_block, *statements ]
+    if parse_value("extend")(ctx):
+        expression = must(parse_expression)(ctx)
+        return Node(NodeType.extends, expression)
 
-@parser
-def parse_function(stream):
+@Parser
+def parse_throw_statement(ctx):
     """
-    function
-        = "Function" "{" ^ (cases | single_case | statemtns) "}"
+    throw_statement
+        = "throw" expression
     """
-    if parse_token(stream, value='Function') and parse_token(stream, value='{'):
-        cases = parse_cases(stream)
-        if cases:
-            must(parse_token(stream, value="}"))
-            return [ None, node.ntype_function, *cases ]
-        single = parse_single_case(stream)
-        if single:
-            must(parse_token(stream, value="}"))
-            return [ None, node.ntype_function, single ]
-        statements = must(parse_statements(stream))
-        must(parse_token(stream, value="}"))
-        return [ None, node.ntype_function, 
-            [ None, node.ntype_case, 
-                None,
-                None,
-                [ None, node.ntype_block, *statements ],
-            ],
-        ]
+    if parse_value("throw")(ctx):
+        expression = must(parse_expression)(ctx)
+        return Node(NodeType.throws, expression)
 
-@parser
-def parse_single_case(stream):
+@Parser
+def parse_assignment(ctx):
     """
-    single_case
-        = patterns "->" ^ statements
+    assignment
+        = <identifier> "=" expression
     """
-    patterns = parse_patterns(stream)
-    if patterns and parse_token(stream, value="->"):
-        statements = must(parse_statements(stream))
-        return [ None, node.ntype_case,
-            patterns,
-            None,
-            [ None, node.ntype_block, *statements ],
-        ]
+    identifier = parse_node_type(NodeType.identifier)(ctx)
+    if identifier and parse_value("=")(ctx):
+        expression = must(parse_expression)(ctx)
+        return Node(NodeType.assign, identifier, expression)
 
-@parser
-def parse_generator(stream):
-    """
-    generator
-        = "Generator" ^ "{" [ single_case ] "}"
-    """
-    if parse_token(stream, value="Generator"):
-        must(parse_token(stream, value="{"))
-        single_case = parse_single_case(stream)
-        must(parse_token(stream, value="}"))
-        return [ None, node.ntype_generator, 
-            single_case or [ None, node.ntype_case,
-                None, 
-                None,
-                [ None, node.ntype_block ],
-            ],
-        ]
-
-@parser
-def parse_case(stream):
-    """
-    case
-        = patterns [ guard ] "=>" ^ statement
-    """
-    patterns = parse_patterns(stream)
-    if patterns:
-        guard = parse_guard(stream)
-        if parse_token(stream, value="=>"):
-            body = must(parse_statement(stream))
-            return [ None, node.ntype_case, patterns, guard, body ]
-
-@parser
-def parse_expression(stream):
+@Parser
+def parse_expression(ctx):
     """
     expression
+        = control_expression
+        | primary_expression
+    """
+    return parse_choice(
+        parse_control_expression,
+        parse_primary_expression,
+    )(ctx)
+
+@Parser
+def parse_control_expression(ctx):
+    """
+    constrol_expression
         = if_expression
         | do_expression
         | while_expression
@@ -400,161 +275,259 @@ def parse_expression(stream):
         | for_expression
         | class_expression
         | try_expression
-        | function
-        | generator
-        | list
-        | map
-        | expression1
     """
-    return (parse_if_expression(stream)
-        or parse_do_expression(stream)
-        or parse_while_expression(stream)
-        or parse_match_expression(stream)
-        or parse_for_expression(stream)
-        or parse_class_expression(stream)
-        or parse_try_expression(stream)
-        or parse_function(stream)
-        or parse_generator(stream)
-        or parse_list(stream)
-        or parse_map(stream)
-        or parse_expression1(stream)
-    )
+    return parse_choice(
+        parse_if_expression,
+        parse_do_expression,
+        parse_while_expression,
+        parse_match_expression,
+        parse_for_expression,
+        parse_class_expression,
+        parse_try_expression,
+    )(ctx)
 
-@parser
-def parse_if_expression(stream):
+@Parser
+def parse_if_expression(ctx):
     """
     if_expression
-        = guard ^ "then" block [ "else" ^ ( block | if_expression ) ]
+        = guard "then" block [ "else" ( block | if_expression ) ]
     """
-    expression = parse_guard(stream)
-    if expression:
-        must(parse_token(stream, value="then"))
-        then_block = must(parse_block(stream))
-        else_block = None
-        if parse_token(stream, value="else"):
-            else_block = must(parse_block(stream) or parse_if_expression(stream))
-        return [ None, node.ntype_if, expression, then_block, else_block ]
+    guard = parse_guard(ctx)
+    if guard:
+        must(parse_value("then"))(ctx)
+        then_block = must(parse_block)(ctx)
+        else_block = parse_value("else")(ctx) and must(parse_choice(
+            parse_block,
+            parse_if_expression
+        ))(ctx)
+        return Node(NodeType.ifexp, guard, then_block, else_block or None)
 
-@parser
-def parse_guard(stream):
+@Parser
+def parse_guard(ctx):
     """
-        guard
-            = "if" ^ expression
+    guard
+        = "if" primary_expression
     """
-    if parse_token(stream, value="if"):
-        return must(parse_expression(stream))
+    if parse_value("if")(ctx):
+        return must(parse_primary_expression)(ctx)
 
-@parser
-def parse_do_expression(stream):
+@Parser
+def parse_do_expression(ctx):
     """
     do_expression
-        = "do" ^ block
+        = "do" block
     """
-    if parse_token(stream, value="do"):
-        return must(parse_block(stream))
+    if parse_value("do")(ctx):
+        return must(parse_block)(ctx)
 
-@parser
-def parse_while_expression(stream):
+@Parser
+def parse_while_expression(ctx):
     """
     while_expression
-        = while_guard ^ "do" block
+        = while_guard "do" block
     """
-    expression = parse_while_guard(stream)
-    if expression:
-        must(parse_token(stream, value="do"))
-        block = must(parse_block(stream))
-        return [ None, node.ntype_while, expression, block ]
+    while_guard = parse_while_guard(ctx)
+    if while_guard:
+        must(parse_value("do"))(ctx)
+        block = must(parse_block)(ctx)
+        return Node(NodeType.whileexp, while_guard, block)
 
-@parser
-def parse_while_guard(stream):
-    if parse_token(stream, value="while"):
-        return must(parse_expression(stream))
+@Parser
+def parse_while_guard(ctx):
+    """
+    while_guard
+        = "while" primary_expression
+    """
+    if parse_value("while")(ctx):
+        return must(parse_primary_expression)(ctx)
 
-@parser
-def parse_match_expression(stream):
+@Parser
+def parse_match_expression(ctx):
     """
     match_expression
-        = "match" ^ expression "with" "{" cases "}"
+        = "match" primary_expression "with" cases_block
     """
-    if parse_token(stream, value="match"):
-        expression = must(parse_expression(stream))
-        must(parse_token(stream, value="with"))
-        must(parse_token(stream, value="{"))
-        cases = must(parse_cases(stream))
-        print(stream_top(stream))
-        must(parse_token(stream, value="}"))
-        return [ None, node.ntype_match, expression, *cases ]
+    if parse_value("match")(ctx):
+        expression = must(parse_primary_expression)(ctx)
+        must(parse_value("with"))(ctx)
+        cases = must(parse_cases_block)(ctx)
+        return Node(NodeType.matchexp, expression, *cases)
 
-@parser
-def parse_for_expression(stream):
+@Parser
+def parse_for_expression(ctx):
     """
     for_expression
-        = "for" ^ pattern "in" expression [ guard ] [ while_guard ] "do" block
+        = "for" pattern "in" primary_expression [ guard ] [ while_guard ] "do" block
     """
-    if parse_token(stream, value="for"):
-        pattern = must(parse_pattern(stream))
-        must(parse_token(stream, value="in"))
-        expression = must(parse_expression(stream))
-        guard = parse_guard(stream)
-        while_guard = parse_while_guard(stream)
-        must(parse_token(stream, value="do"))
-        block = must(parse_block(stream))
-        return [ None, node.ntype_for, pattern, expression, guard, while_guard, block ]
+    if parse_value("for")(ctx):
+        pattern = must(parse_pattern)(ctx)
+        must(parse_value("in"))(ctx)
+        expression = must(parse_primary_expression)(ctx)
+        guard = parse_guard(ctx)
+        while_guard = parse_while_guard(ctx)
+        must(parse_value("do"))(ctx)
+        block = parse_block(ctx)
+        return Node(NodeType.forexp, pattern, expression, guard, while_guard, block)
 
-@parser
-def parse_class_expression(stream):
+@Parser
+def parse_class_expression(ctx):
     """
     class_expression
-        = "Class" "{" ^ single "}"
+        = "Class" ( case_block )
     """
-    if parse_token(stream, value="Class") and parse_token(stream, value="{"):
-        single = must(parse_single_case(stream))
-        must(parse_token(stream, value="}"))
-        return [ None, node.ntype_class,
-            [ None, node.ntype_function, single ],
-        ]
+    if parse_value("Class")(ctx):
+        case = must(parse_case_block)(ctx)
+        return Node(NodeType.classexp, case)
 
-@parser
-def parse_try_expression(stream):
+@Parser
+def parse_try_expression(ctx):
     """
     try_expression
-        = "try" ^ block "catch" single_case [ "finally" ^ block [] )
+        = "try" block "catch" ( case_block | block ) [ "finally" block ]
     """
-    if parse_token(stream, value="try"):
-        try_block = must(parse_block(stream))
-        must(parse_token(stream, value="catch"))
-        must(parse_token(stream, value="{"))
-        catch = must(parse_single_case(stream))
-        must(parse_token(stream, value="}"))
-        finally_block = parse_token(stream, value="finally") and must(parse_block(stream))
-        return [ None, node.ntype_try, try_block, 
-            [ None, node.ntype_function, catch ],
-            finally_block,
-        ]
+    if parse_value("try")(ctx):
+        try_block = parse_block(ctx)
+        must(parse_value("catch"))(ctx)
+        catch_block = must(parse_case_block)(ctx)
+        finally_block = parse_value("finally")(ctx) and must(parse_block)(ctx)
+        return Node(NodeType.tryexp, try_block, catch_block, finally_block or None)
 
-@parser
-def parse_expression1(stream):
+@Parser
+def parse_primary_expression(ctx):
     """
-    expression1
-        = expression2 { "or" ^ expression2 }
+    primary_expression
+        = function
+        | generator 
+        | list_literal
+        | map_literal
+        | or_expression
     """
-    return binary(parse_expression2, stream, [ "or" ])
-    
-@parser
-def parse_expression2(stream):
-    """
-    expression2
-        = expression3 { "and" ^ expression3 }
-    """
-    return binary(parse_expression3, stream, [ "and" ])
+    return parse_choice(
+        parse_function,
+        parse_generator,
+        parse_list_literal,
+        parse_map_literal,
+        parse_or_expression,
+    )(ctx)
 
-@parser
-def parse_expression3(stream):
+@Parser
+def parse_function(ctx):
     """
-    expression3
-        = expression4  { ( "/=" | "==" | "is not" | "is" | "<" | "<=" | ">" | ">=" | "in" | "not in") ^ expression4 }
+    function
+        = "Function" cases_block
+        | "Function" case_block
     """
-    return binary(parse_expression4, stream, [
+    if parse_value("Function")(ctx):
+        cases = parse_cases_block(ctx)
+        if cases:
+            return Node(NodeType.function, *cases)
+    ctx.rollback()
+    if parse_value("Function")(ctx):
+        case = must(parse_case_block)(ctx)
+        return Node(NodeType.function, case)
+
+@Parser
+def parse_case_block(ctx):
+    """
+    case_block
+        = "{" patterns "->" statements "}"
+        | block
+    """
+    if parse_value("{")(ctx):
+        patterns = parse_patterns(ctx)
+        if patterns and parse_value("->")(ctx):
+            statements = must(parse_statements)(ctx)
+            must(parse_value("}"))(ctx)
+            return Node(NodeType.case, patterns, None, Node(NodeType.block, *statements))
+    ctx.rollback()
+    block = parse_block(ctx)
+    if block:
+        return Node(NodeType.case, None, None, block)
+
+@Parser
+def parse_block(ctx):
+    """
+    block
+        = "{" statements "}"
+    """
+    if parse_value("{")(ctx):
+        statements = parse_statements(ctx)
+        if parse_value("}")(ctx):
+            return Node(NodeType.block, *statements)
+
+@Parser
+def parse_cases_block(ctx):
+    """
+    cases_block
+        = "{" cases "}"
+    """
+    if parse_value("{")(ctx):
+        cases = parse_cases(ctx)
+        if parse_value("}")(ctx):
+            return cases
+
+@Parser
+def parse_case(ctx):
+    """
+    case
+        = patterns [ guard ] "=>" statement
+    """
+    patterns = parse_patterns(ctx)
+    if patterns:
+        guard = parse_guard(ctx)
+        if parse_value("=>")(ctx):
+            statement = must(parse_statement)(ctx)
+            return Node(NodeType.case, patterns, guard, Node(NodeType.block, statement))
+
+@Parser
+def parse_generator(ctx):
+    """
+    generator
+        = "Generator" case_block
+    """
+    if parse_value("Generator")(ctx):
+        case = must(parse_case_block)(ctx)
+        return Node(NodeType.generator, case)
+
+@Parser
+def parse_or_expression(ctx):
+    """
+    or_expression
+        = and_expression { "or" and_expression }
+    """
+    return parse_binary_operator(
+        parse_and_expression,
+        parse_value("or"),
+        parse_and_expression,
+    )(ctx)
+
+@Parser
+def parse_and_expression(ctx):
+    """
+    and_expression
+        = relational_expression { "and" relational_expression }
+    """
+    return parse_binary_operator(
+        parse_relational_expression,
+        parse_value("and"),
+        parse_relational_expression,
+    )(ctx)
+
+@Parser
+def parse_relational_expression(ctx):
+    """
+    relational_expression
+        = additive_expression { relational_operator additive_expression }
+    """
+    return parse_binary_operator(
+        parse_additive_expression,
+        parse_relational_operator,
+        parse_additive_expression
+    )(ctx)
+
+@Parser
+def parse_relational_operator(ctx):
+    return parse_choice_of_values(
         "/=",
         "==",
         "is not",
@@ -563,165 +536,223 @@ def parse_expression3(stream):
         "<=",
         ">",
         ">=",
-        "in",
-        "not in"
-    ])
-        
-@parser
-def parse_expression4(stream):
-    """
-    expression4
-        = expression5 { ( "+" | "-" ) ^ expression5 }
-    """
-    return binary(parse_expression5, stream, [ "+", "-" ])
+        "not in",
+        "in"
+    )(ctx)
 
-@parser
-def parse_expression5(stream):
+@Parser
+def parse_additive_expression(ctx):
     """
-    expression5
-        = expression6 { ( "*" | "/" ) ^ expression6 }
+    additive_expression
+        = multiplicative_expression { additive_operator multiplicative_expression }
     """
-    return binary(parse_expression6, stream, [ "*", "/" ])
+    return parse_binary_operator(
+        parse_multiplicative_expression,
+        parse_additive_operator,
+        parse_multiplicative_expression,
+    )(ctx)
 
-@parser
-def parse_expression6(stream):
+@Parser
+def parse_additive_operator(ctx):
     """
-    expression6
-        = unary_operator ^ expression7
-        | expression7 [ ( ".." | "^" ) expression6 ]
+    additive_operator
+        = "+"
+        | "-"
     """
-    unary_operator = parse_unary_operator(stream)
-    if unary_operator:
-        expression = must(parse_expression(stream))
-        return [ None, node.unaryop_to_ntype[unary_operator[2]], expression ]
-    expression = parse_expression7(stream)
+    return parse_choice_of_values("+", "-")(ctx)
+
+@Parser
+def parse_multiplicative_expression(ctx):
+    """
+    multiplicative_expression
+        = exponential_expression { multiplicative_operator exponential_expression }
+    """
+    return parse_binary_operator(
+        parse_exponential_expression,
+        parse_multiplicative_operator,
+        parse_exponential_expression,
+    )(ctx)
+
+@Parser
+def parse_multiplicative_operator(ctx):
+    """
+    multiplicative_operator
+        = "*"
+        | "/"
+    """
+    return parse_choice_of_values("*", "/")(ctx)
+
+@Parser
+def parse_exponential_expression(ctx):
+    """
+    exponential_expression
+        = unary_expression [ exponential_operator exponential_expression ]
+    """
+    return parse_binary_operator(
+        parse_unary_expression,
+        parse_exponential_operator,
+        parse_exponential_expression,
+    )(ctx)
+
+@Parser
+def parse_exponential_operator(ctx):
+    """
+    exponential_operator
+        = "^"
+        | ".."
+    """
+    return parse_choice_of_values("^", "..")(ctx)
+
+@Parser
+def parse_unary_expression(ctx):
+    """
+    unary_expression
+        = [ unary_operator ] simple_expression { calls_and_accesses }
+    """
+    unary_operator = parse_unary_operator(ctx)
+    expression = parse_simple_expression(ctx)
     if expression:
-        # TODO refactor this awful rollback
-        checkpoint = stream["position"]
-        operator = parse_token(stream, value="..") or parse_token(stream, value="^")
-        if operator:
-            right = parse_expression6(stream)
-            if right:
-                return [ None, node.binaryop_to_ntype[operator[2]], expression, right ]
-        stream["position"] = checkpoint
+        expression = parse_calls_and_accesses_of(expression)(ctx)
+        if unary_operator:
+            expression = Node(unary_operators[unary_operator.value], expression)
         return expression
 
-def parse_unary_operator(stream):
+@Parser
+def parse_unary_operator(ctx):
     """
-        unary_operator
+    unary_operator
         = "not"
         | "+"
         | "-"
+        | "..."
     """
-    return (parse_token(stream, value="not")
-        or parse_token(stream, value="+")
-        or parse_token(stream, value="-")
-    )
+    return parse_choice_of_values("not", "+", "-", "...")(ctx)
 
-@parser
-def parse_expression7(stream):
+@Parser
+def parse_simple_expression(ctx):
     """
-    expression7
-        = "..." ^ spreadable
-        | spreadable
-        | atom
+    simple_expression
+        = "(" expression ")"
+        | literal
+        | <identifier>
     """
-    if parse_token(stream, value="..."):
-        spreadable = must(parse_spreadable(stream))
-        return [ None, node.ntype_spread, spreadable ]
-    return parse_spreadable(stream) or parse_atom(stream)
-
-@parser
-def parse_spreadable(stream):
-    """
-    spreadable
-        = "(" ^ expression ")" { { path } call }
-        | <ident> { { path } call }
-    """
-    expression = parse_token(stream, ntype=node.ntype_ident)
-    if not expression and parse_token(stream, value="("):
-        expression = must(parse_expression(stream))
-        must(parse_token(stream, value=")"))
-    if expression:
-        path = parse_path(stream)
-        while path:
-            expression = [ None, node.ntype_path, expression, path ]
-            path = parse_path(stream)
-        call = parse_call(stream)
-        while call:
-            expression = [ None, node.ntype_call, expression, *call ]
-            path = parse_path(stream)
-            while path:
-                expression = [ None, node.ntype_path, expression, path ]
-                path = parse_path(stream)
-            call = parse_call(stream)
+    if parse_value("(")(ctx):
+        expression = must(parse_expression)(ctx)
+        must(parse_value(")"))(ctx)
         return expression
+    return parse_choice(
+        parse_literal,
+        parse_node_type(NodeType.identifier),
+    )(ctx)
 
-@parser
-def parse_path(stream):
+def parse_calls_and_accesses_of(expression):
     """
-    path
-        = "." ^ <ident>
-        | "[" ".." ^ ( spreadable | <number> ) "]"
-        | "[" open_range2 "]"
-        | "[" ^ expression "]"
+    calls_and_accesses
+        = { [ call ] [ access ] }
     """
-    if parse_token(stream, value="."):
-        return must(parse_token(stream, ntype=node.ntype_ident))
-    checkpoint = stream["position"]
-    if parse_token(stream, value="["):
-        if parse_token(stream, value=".."):
-            top = must(parse_spreadable(stream) or parse_token(stream, ntype=node.ntype_number))
-            must(parse_token(stream, value="]"))
-            return [ None, node.ntype_range, None, top ]
-        bottom = parse_spreadable(stream) or parse_token(stream, ntype=node.ntype_number)
-        if bottom and parse_token(stream, value="..") and parse_token(stream, value="]"):
-            return [ None, node.ntype_range, bottom, None ]
-    stream["position"] = checkpoint
-    if parse_token(stream, value="["):
-        expression = must(parse_expression(stream))
-        must(parse_token(stream, value="]"))
-        return expression
+    @Parser
+    def inner_parser(ctx):
+        inner_expression = expression
+        parsed_call_or_access = True
+        while parsed_call_or_access:
+            parsed_call_or_access = False
+            call = parse_call(ctx)
+            if call is not None:
+                parsed_call_or_access = True
+                inner_expression = Node(NodeType.call, inner_expression, *call)
+            access = parse_access(ctx)
+            if access:
+                parsed_call_or_access = True
+                inner_expression = Node(NodeType.access, inner_expression, access)
+        return inner_expression
+    return inner_parser
 
-@parser
-def parse_call(stream):
+@Parser
+def parse_call(ctx):
     """
     call
-        = "(" ^ expressions ")"
+        = "(" expressions ")"
     """
-    if parse_token(stream, value="("):
-        expressions = must(parse_expressions(stream))
-        must(parse_token(stream, value=")"))
+    if parse_value("(")(ctx):
+        expressions = parse_expressions(ctx)
+        must(parse_value(")"))(ctx)
         return expressions
 
-@parser
-def parse_patterns(stream):
+@Parser
+def parse_access(ctx):
+    """
+    access
+        = identifier_access
+        | expression_access
+        | pattern_access
+    """
+    return parse_choice(
+        parse_identifier_access,
+        parse_expression_access,
+        parse_pattern_access,
+    )(ctx)
+
+@Parser
+def parse_identifier_access(ctx):
+    """
+    identifier_access
+        = "." <identifier>
+    """
+    if parse_value(".")(ctx):
+        return must(parse_node_type(NodeType.identifier))(ctx)
+
+@Parser
+def parse_expression_access(ctx):
+    """
+    expression_access
+        = "[" expression "]"
+    """
+    if parse_value("[")(ctx):
+        expression = parse_expression(ctx)
+        if parse_value("]")(ctx):
+            return expression
+
+@Parser
+def parse_pattern_access(ctx):
+    """
+    pattern_access
+        = "[" pattern "]"
+    """
+    if parse_value("[")(ctx):
+        pattern = parse_pattern(ctx)
+        if parse_value("]")(ctx):
+            return pattern
+
+@Parser
+def parse_patterns(ctx):
     """
     patterns
         = [ pattern ] { "," pattern } [ "," ]
     """
-    return [ None, node.ntype_patterns, *many(parse_pattern, stream) ]
+    patterns = parse_many_seperated_by(parse_pattern, parse_value(","))(ctx)
+    if patterns:
+        return Node(NodeType.patterns, *patterns)
 
-@parser
-def parse_expressions(stream):
+@Parser
+def parse_expressions(ctx):
     """
-    expressions 
-        = expression { "," expression } [ "," ]
+    expressions
+        = [ expression ] { "," expression } [ "," ]
     """
-    return many(parse_expression, stream)
+    return parse_many_seperated_by(parse_expression, parse_value(","))(ctx)
 
-@parser
-def parse_pairs(stream):
+@Parser
+def parse_pairs(ctx):
     """
-    pairs 
+    pairs
         = [ pair ] { "," pair } [ "," ]
     """
-    return many(parse_pair, stream)
+    return parse_many_seperated_by(parse_pair, parse_value(","))(ctx)
 
-@parser
-def parse_cases(stream):
+@Parser
+def parse_cases(ctx):
     """
     cases
         = [ case ] { "," case } [ "," ]
     """
-    return many(parse_case, stream)
+    return parse_many_seperated_by(parse_case, parse_value(","))(ctx)

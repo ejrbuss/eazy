@@ -1,3 +1,5 @@
+import pytest
+
 from ..parsing import (
     Stream,
     ParsingContext,
@@ -14,7 +16,7 @@ from ..parsing import (
     parse_binary_operator,
 )
 from ..node import Node, NodeType
-from ..tokenizer2 import tokenize
+from ..tokenizer import tokenize
 
 def test_stream():
     stream = Stream(tokenize("a b\nc"))
@@ -51,12 +53,8 @@ def test_Parser():
 def test_must():
     stream = Stream(tokenize("a b c"))
     assert must(parse_value("a"))(ParsingContext(stream)) == Node(NodeType.identifier, "a")
-    error_occured = False
-    try:
+    with pytest.raises(AssertionError) as exinfo:
         must(parse_value("a"))(ParsingContext(stream))
-    except:
-        error_occured = True
-    assert error_occured
 
 def test_peek_value():
     stream = Stream(tokenize("a b c"))

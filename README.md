@@ -1,5 +1,10 @@
 # eazy
 
+## Testing
+```
+$ pytest --cov-report term-missing --cov
+```
+
 ## TODO
  - end keyword for ranges: 1..end
  - Better tokenizing errors
@@ -155,3 +160,13 @@ var compile_time = Function { ast ->
    eazy.language.as_node(eazy.eval(ast))
 }
 @compile_time(4 + 4)
+
+
+var Stream = Class {}
+var pop = Function {}
+
+exprt(Map [ new: Stream, pop ])
+
+var Stream = import("./stream")
+var s = Stream.new()
+Stream.pop(s)
