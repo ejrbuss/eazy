@@ -17,7 +17,6 @@ class Node:
     def __repr__(self):
         return f"({self.node_type} {' '.join(repr(arg) for arg in self.args)})"
 
-
 class NodeType:
     # AST node types           # Structure
     module = "module"           # (module ...statements)
