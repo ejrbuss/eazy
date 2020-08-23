@@ -1065,3 +1065,34 @@ match result {
    List [ .uh_oh, error ] => 
 }
 ```
+
+# TODO
+ - error reporting
+   - Point to place in source
+   - Pattern match to the correct message
+ - desguar
+   - eliminate do expression
+   - eliminate for expression
+   - eliminate match expression
+   - eliminate cased functions
+ - code gen
+   - generate ezir
+ - interpreting
+   - start with directly executing ezir
+   - worry about bytecode later
+ - prelude
+   - implement prelude
+   - hook prelude into compiler
+ - self hosting
+
+```
+match ezir[isp] with {
+    List [ .move, vx, vy ] => do {
+       vars[vy] = vars[vx]
+    },
+    List [ .mul, vx, vy, vz ] => do {
+       vars[vz] = vars[vx] * vars[vy];
+    },
+    ...
+}
+```

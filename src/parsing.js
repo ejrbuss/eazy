@@ -25,6 +25,14 @@ function Parser(parsing_function) {
     };
 }
 
+function pass(stream) {
+    return true;
+}
+
+function fail(stream) {
+    return false;
+}
+
 function literal(literal) {
     return function(stream) {
         if (stream.data.startsWith(literal, stream.position)) {
@@ -219,7 +227,7 @@ function must(parser, error_metadata) {
     return function(stream) {
         const result = parser(stream);
         if (result === false) {
-            const error = new Error();
+            const error = new Error("at position: " + stream.error_position+ " data: " + JSON.stringify(stream.data[stream.error_position]));
             Object.assign(error, error_metadata);
             error.stream = stream;
             throw error;
@@ -316,13 +324,15 @@ module.exports = {
     Parser,
 
     // Parsers
+    pass,
+    fail,
     literal,
     regex,
     next,
     done,
 
     // Combinators
-    all: all,
+    all,
     lazy,
     sequence,
     named_sequence,
