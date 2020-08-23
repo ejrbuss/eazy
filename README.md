@@ -16,7 +16,7 @@ Keywords
 if, then, else, do, while, for, in, match, with, return, throw, extend, try, catch, finally
 
 Data
-Nothing, True, False, Boolean, Number, String, List, Map, Function, Generator, Class
+Nothing, True, False, Boolean, Number, String, List, Map, Function,  // Generator, Class
 
 # Builtins
 import, export, merge, count, copy, print, input, help, type, describe, meta, NaN, Infinity, main, assert, test
@@ -655,13 +655,413 @@ Function.compose(
    code: [ ... ],
    data: [ ... ],
    debug: {
-      sources: {
-         "file.ez": "source"
-      },
+      sources: [],
       lines: [],
       functions: [],
       symbols: [], 
    },
 }
 
+```
+
+
+```js
+// In memory representation JSON-able - this may be enough
+[
+   // [ OPCODE, ...operands ],
+
+   // Control
+   [ MODULE, version, canonical_path, locals ],
+   [ HALT ],
+   [ LABEL, label_identifier ],
+   [ GOTO, label_identifier ],
+   [ GOIF, condition, label_identifier ],
+   [ IMPORT, path, dst ],
+   [ EXPORT, src ],
+
+   // Arithmetic
+   [ ADD, left, right, dst  ],
+   [ SUB, left, right, dst  ],
+   [ MUL, left, right, dst  ],
+   [ DIV, left, right, dst  ],
+   [ MOD, left, right, dst  ],
+   [ POW, left, right, dst  ],
+   [ FLOOR, src, dst ],
+   [ CEIL, src, dst ],
+
+   // Bit-orients
+   [ BIT_AND, left, right, dst ],
+   [ BIT_OR, left, right, dst ],
+   [ BIT_XOR, left, right, dst ], 
+   [ BIT_NOT, src, dst ],
+   [ BIT_SHL, src, shift, dst, ]
+   [ BIT_ASHR, src, shift, dst ],
+   [ BIT_LSHR, src, shift, dst ],
+
+   // Booleans and tests
+   [ AND, left, right, dst ],
+   [ OR, left, right, dst ],
+   [ NOT, src, dst ],
+   [ EQ, left, right, dst ],
+   [ IS, left, right, dst ],
+   [ LT, left, right, dst ],
+   [ LTE, left, right, dst ],
+   [ GT, left, right, dst ],
+   [ GTE, left, right, dst ],
+
+   // Variables
+   [ MOVE, src, dst ],
+   [ COPY, src, dst ],
+   [ CONST, value, dst ],
+
+   // Types
+   [ TYPE, src, dst ],
+
+   // Exceptions
+   [ TRHOW, src ],
+   [ TRY, dst, handler ],
+   [ CAUGHT ],
+
+   // Collections (Array, Map, Ref, String)
+   [ MERGE, left, right, dst ],
+   [ UPDATE, left, right, dst ],
+   [ GET, key, col, dst ],
+   [ SET, key, col, dst ],
+   [ PUSH, col, val, dst ],
+   [ COUNT, col ],
+   [ SLICE, col, start, end, dst ],
+   [ REPEAT, col, times, dst ],
+   [ INDEX, col, key, dst ],
+   [ REVERSE, col, dst ],
+   [ ENTRIES, col, dst ],
+   [ KEYS, col, dst ],
+   [ VALUES, col, dst ],
+   [ FREEZE, col ],
+
+   // Strings
+   [ UNICODE, src, key dst ],
+   [ MATCH, src, pat, dst ],
+   [ SPLIT, src, pat, dst ],
+   [ JOIN, src, pat, dst ],
+
+   // Functions
+   [ FUNCTION, name, locals ],
+   [ CLOSURE, name, caps, dst ],
+   [ CALL, closure, args, dst ],
+   [ TAIL_CALL, closure, args ],
+   [ RETURN, src ],
+
+   // Extensions
+   [ EXTENSION, name, dst ] ],
+
+   // Debug
+   [ BREAK ],
+   [ TRACE, dst ],
+   [ META, dst ],
+]
+
+/* eg.ez
+var add = Function { a, b -> a + b }
+export Map [ add ]
+*/
+[
+   [ MODULE, "0.0.1", "eg.ez", 1 ],
+
+   [ CLOSURE, "add", V[0], V[0] ],
+   [ EXPORT, V[0] ],
+
+   [ FUNCTION, "add", 2, 2 ],
+   [ GET, 0, ARGS, V[1] ],
+   [ GET, 1, ARGS, V[0] ],
+   [ ADD, V[0], V[1], V[0] ],
+   [ RETURN, V[0] ],
+]
+
+
+/*
+var my_count = Function {
+   List [] => 0,
+   List [ x ] => 1,
+   List [ x, ...xs ] => 1 + my_count(xs),
+}
+
+export count(List [ 1, 2, 3 4 ])
+
+-- desugars into =>
+
+var my_count = Function { ...args ->
+   if type(arg[0]) is List & count(arg[0]) is 0 then {
+      return 0
+   }
+   if type(arg[0]) is List & count(arg[0]) is 1 then {
+      return 1
+   }
+   if type(arg[0]) is List & count(arg[0]) > 1 then {
+      var x = arg[0][0]
+      var xs = arg[0][1..]
+      return 1 + my_count(xs)
+   }
+   throw Error("MatchError", "my_count", arg)
+}
+
+-- which is optimized to
+var my_count = Function { ...args ->
+   if count(args) is not 1 then {
+      throw Error("MatchError", "my_count", arg)
+   }
+   var arg = args[0]
+   if type(arg) is not List then {
+      throw Error("MatchError", "my_count", arg)
+   }
+   var result = Map [ 0: 0, 1: 1 ][count(arg)]
+   if result is not Nothing then {
+      return result
+   }
+   var xs = args[1..]
+   return 1 + my_count(xs)
+}
+*/
+
+
+[
+   [ MODULE, "0.0.1", "eg.ez", 2 ],
+
+   [ CLOSURE, "count", V[0], V[0], ],
+   [ CONST, [ 1, 2, 3, 4 ], V[1] ],
+   [ CALL, V[0], V[1], V[0] ],
+   [ EXPORT, V[0] ],
+
+   [ FUNCTION, "count", 1, 3 ],
+   [ TYPE, ARGS, V[1] ],
+   [ CONST, LIST_TYPE, V[2] ],
+   [ IS, V[1], V[2], V[2] ],
+   [ GOIF, V[2], "cases" ],
+   [ CONST, V[]]
+
+   [ COUNT, ARGS, V[1] ],
+   [ CONST, 0, V[2] ],
+   [ IS, V[1], V[2], V[2] ],
+   [ GOIF, V[2], "case1" ],
+   [ CONST, 1, V[2] ],
+   [ IS, V[1], V[2], V[2] ],
+   [ GOIF, V[2], "case2" ],
+
+]
+```
+
+I am struggling with a design decision re: my new programming language. Its not just one thing, but a group of issues that all interconnect. You'll need some contxt.
+
+In order to maintain my goal of creating a programming language for beginners I have several tenants
+ - Minimize concepts. Memory management, type systems, object oriented programming, functional programming, etc. should all be unecessary to understand code
+ - Avoid implicit code. Many languages have constructs that reduce the size of code by implicitly doing things. Object Oriented programming is the classic example where `List.reverse(my_list)` becomes `my_list.reverse()`.
+ - Try to have one way to do things. Most languages have many ways to do the same thing. I want to try and minimize this.
+ - Emphasize procedures and data. Programs in this langauge should be written by writing procedures (functions) which take data and produce data. Data, in the form of lists, maps, strings, numbers, etc. should be easy to express and procedures should flow top to bottom.
+
+One design decision I have come to is that there are only two "compound" types in the language, lists and maps. There are NO sets, modules, namespaces, buffers, structs, records, etc. All fo those things, if needed, are intead created out of combinations of lists and maps. So, for example to create a math library with several math related functions, rather than putting those functions in the same namespace/module/package they would instead be placed in a map. Here is a madeup example
+
+```
+-- This is a comment. 
+- This is in imaginary file math.ez
+
+var square = Function { x -> 
+    x * x 
+}
+
+var cube = Function { x -> 
+    x * x * x 
+}
+
+export(Map [
+    "square": square,
+    "cube": cube,
+])
+
+-- In another file
+var Math = import("math.ez")
+
+var x = Math["square"](42)
+```
+
+Because this will be such a common way to structure code there are several pieces of syntactic sugar which can be taken from languages like JavaScript, here are some
+
+```
+-- Allow string lookups to be done using dot notation
+Math["square](42) == Math.square(42)
+
+-- Allow map creation to skip quotes around strings
+Map [ "square": square ] == Map [ square: square ]
+
+-- Allow map creation to skip providing a key and a value if the key and value have the same name
+Map [ square: square ] == Map [ square ]
+```
+
+These are all rather convenient, but come at a cost. They introduce conceptual overhead, produce multiple ways to do things, and in the case of the final example perform implicit actions.
+
+Completely throwing away all of this sugar though is not enitrely justifiable. I insist that library calls look like one of the following
+
+```
+Math.square(42)
+-- or
+Math:square(42)
+-- or
+Math::square(42)
+```
+
+Providing any of these notations makes map creation like the following seem like it would logically follow
+
+```
+Map [ square: square ]
+```
+
+Since we didn't need to quote the string when accessing the map, why would we need to quote it when creating it? Well let's say we accept this, and forget about the other two forms of syntactic sugar. There is still a wrinkle. Is the key of a map a pattern or an expression? Maybe the distinction doesn't make sense, but here is an example that should help clarify
+
+```
+var key = "not_a_key"
+Map [ key: 42 ]
+-- is this
+Map [ "key": 42 ]
+-- or
+Map [ "not_a_key": 42 ]
+```
+
+JavaScript solves this dilemma by adding yet another bit of syntax for when you want the keys of an object to be an expression `[]`. This would change the above to
+
+```
+Map [ key: 42 ] == Map [ "key": 42 ]
+Map [ [key]: 42 ] == Map [ "not_a_key": 42 ]
+```
+
+On another note one of the other details of this language is that there is a short list of fundamental types. They are
+ - `Nothing` (think NULL)
+ - `Boolean` (True or False)
+ - `Number` (Floating Point double precision)
+ - `String`
+ - `List`
+ - `Map`
+ - `Function`
+
+When considering theses types there are a few unsolved problems. One example is wwhat to do wwhen I want something /like/ an enum. There are several possibilities
+
+```
+-- Declare constants
+var RED = 0
+var GREEN = 1
+var BLUE = 2
+
+-- Capture values in a map
+var Color = Map [
+    RED: 0,
+    GREEN: 1,
+    BLUE: 2,
+]
+
+-- Use strings rather than numbers 
+-- for simpler debugging
+var Color = Map [
+    RED: "RED",
+    GREEN: "GREEN",
+    BLUE: "BLUE",
+]
+
+-- Coulr wrap up one of the above in a function call too
+var Color = Enum(
+    "RED", 
+    "GREEN", 
+    "BLUE"
+)
+```
+
+Another solution is to introduce a new type to represent enum values. A common feature of dynamic languages is an atom type (aka as a keyword or symbol). Atoms compare like numbers, but look kind of like strings. All they are really good for is asking is this atom the same as another atom. Here are some examples of common syntax for these in other languages
+
+```
+-- Clojure, Elixir, and Ruby
+:atom
+-- JavaScript
+Symbol("atom")
+-- Erlang
+'atom'
+-- Tulip
+.atom
+-- Lisp
+'atom
+-- Prolog
+atom
+```
+
+Introducing atoms would be a gread solution for the enum problem, but introduces two new problems: 
+ - Atoms are another concept a language user has to learn. 
+ - It is not clear how atoms should interact with maps
+
+Expanding on the second point, in languages with atoms, they typically act as the default key type for maps so the following would change
+
+```
+
+
+import "IO" as IO as Map [
+    read_file,
+    write_file,
+]
+
+import "IO" as IO as Map [
+    :read_file = read_file,
+    :write_file = write_file,
+]
+
+var Color = Set [ :red, :green, :blue ]
+```
+
+Atom vs keyword (almost ashuredly go with keyword)
+
+Extra types
+ - Reference, Handle, BlackBox type
+ - Buffer/Array/Bytes type
+ - Set (would make a lot of sense, I don't think it would be overload)
+
+```
+import("IO") as Map [
+    read_file,
+    write_file,
+]
+
+let square = Function { x -> x * x }
+var square = Function { x -> x * x }
+
+not(choice("i", "&", "2", "@""))
+
+let List [ x, y ] = List [ 1, 2 ]
+
+List [ 1, 2 ] as List [ x, y ]
+
+Function square { x ->
+   x * x
+}
+
+while i < count(array) do {
+   i = i + 1
+}
+
+import("Eazy/IO") as Map [
+
+]
+let IO      = import("IO")
+let Parsing = import("Parsing")
+let Lexer   = import("Lexer")
+
+let main = Function { 
+   IO.print("Hi!")
+}
+
+-- with spreads this becomes crazy powerful
+Map [ :collection:size = length ] == Map [ :collection = Map [ :size = length ] ]
+
+Color = Enum(
+   :red = "red",
+   :blue = "blue",
+   :green = "green",
+)
+
+match result {
+   List [ .ok, result ] => 
+   List [ .uh_oh, error ] => 
+}
 ```

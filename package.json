@@ -1,0 +1,26 @@
+{
+  "name": "eazy",
+  "version": "1.0.0",
+  "description": "## Testing ``` $ pytest --cov-report term-missing --cov ```",
+  "main": "index.js",
+  "directories": {
+    "doc": "doc"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ejrbuss/eazy.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ejrbuss/eazy/issues"
+  },
+  "homepage": "https://github.com/ejrbuss/eazy#readme",
+  "devDependencies": {
+    "benchmark": "^2.1.4",
+    "jest": "^26.1.0"
+  }
+}

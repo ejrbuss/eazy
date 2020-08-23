@@ -1,0 +1,11 @@
+val min = Function {
+    n1, n2         => if { n1 < n2 } then { n1 } else { n2 },
+    ...ns          => min(ns),
+    List [ ...ns ] => List.reduce(min, ns),
+}
+
+-- Alternatively (probably not, but in some cases it will be needed)
+val max = Function { ...args -> meta('max(*args)') }
+
+
+export Map [ min, max, cos, sin, tan, exp ]
