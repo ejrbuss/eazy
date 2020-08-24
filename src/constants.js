@@ -114,7 +114,6 @@ const NodeType = {
     // Token Node Types
     Identifier: "Identifier",
     Keyword: "Keyword",
-    Builtin: "Builtin",
     Operator: "Operator",
     Doc: "Doc",
     ExplicitTerminator: "ExplicitTerminator",

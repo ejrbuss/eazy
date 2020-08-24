@@ -48,7 +48,6 @@ pattern_pair
 
 simple_literal
     = <identifier>
-    | <builtin>
     | <symbol>
     | <string>
     | <number>

@@ -1,7 +1,7 @@
 const { 
     NodeType,
     Operator,
-} = require("./constants");
+} = require("./Constants");
 const {
     Stream,
     Parser, 
@@ -21,7 +21,7 @@ const {
     map_to_nth,
     map_into,
     named_sequence,
-} = require("./parsing");
+} = require("./Parsing");
 
 function token_of_type(type) {
     return Parser(function(stream) {
@@ -74,7 +74,6 @@ const terminator = choice(
 
 const simple_literal = choice(
     token_of_type(NodeType.Identifier),
-    token_of_type(NodeType.Builtin),
     token_of_type(NodeType.Symbol),
     token_of_type(NodeType.String),
     token_of_type(NodeType.Number),
@@ -498,7 +497,7 @@ const expression = choice(
 
 const assignment = map_into({ type: NodeType.Assignment }, 
     named_sequence(
-        "identifier", token_of_type(NodeType.Identifier),
+        "target", token_of_type(NodeType.Identifier),
         "accesses", many(access),
         token_with_value("="),
         "expression", must(expression),

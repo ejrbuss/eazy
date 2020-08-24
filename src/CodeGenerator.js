@@ -1,5 +1,5 @@
 const ezir = require("./ezir");
-const { NodeType } = require("./constants");
+const { NodeType } = require("./Constants");
 
 const version = "dev";
 

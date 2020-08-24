@@ -1,6 +1,6 @@
-const Lexer = require("./lexer");
-const { Stream } = require("./parsing");
-const { TokenType } = require("./constants");
+const Lexer = require("./Lexer");
+const { Stream } = require("./Parsing");
+const { TokenType } = require("./Constants");
 
 function lex(source) {
     return discard_position(Lexer.lex(Stream(source)));
@@ -115,12 +115,6 @@ test("Lexer.Identifier", function() {
     ]);
 });
 
-test("Lexer.Builtin", function() {
-    expect(lex("List")).toEqual([
-        { type: TokenType.Builtin, value: "List" },
-    ]);
-});
-
 test("Lexer.Doc", function() {
   expect(lex("------let")).toEqual([
     { type: TokenType.Doc, value: "------" },
@@ -152,7 +146,7 @@ test("Lexer.general", function () {
         { type: 'Whitespace', value: ' ' },
         { type: 'Operator', value: '=' },
         { type: 'Whitespace', value: ' ' },
-        { type: 'Builtin', value: 'Function' },
+        { type: 'Identifier', value: 'Function' },
         { type: 'Whitespace', value: ' ' },
         { type: 'Punctuation', value: '{' },
         { type: 'Whitespace', value: ' ' },
@@ -168,7 +162,7 @@ test("Lexer.general", function () {
         { type: 'Whitespace', value: ' ' },
         { type: 'Operator', value: '=' },
         { type: 'Whitespace', value: ' ' },
-        { type: 'Builtin', value: 'Function' },
+        { type: 'Identifier', value: 'Function' },
         { type: 'Whitespace', value: ' ' },
         { type: 'Punctuation', value: '{' },
         { type: 'Whitespace', value: ' ' },

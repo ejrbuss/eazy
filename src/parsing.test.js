@@ -25,7 +25,7 @@ const {
     map_error,
     filter,
     at_least_n,
-} = require("./parsing");
+} = require("./Parsing");
 
 test("Parsing.literal", function() {
     expect(literal("abc")(Stream("abcdef"))).toBe("abc");

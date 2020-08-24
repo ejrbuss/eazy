@@ -1,7 +1,7 @@
 const fs = require("fs");
-const Parser = require("./parser");
-const Lexer = require("./lexer");
-const { Stream } = require("./parsing");
+const Parser = require("./Parser");
+const Lexer = require("./Lexer");
+const { Stream } = require("./Parsing");
 const error_messaging = require("./error_messaging");
 
 function parse_file(path) {

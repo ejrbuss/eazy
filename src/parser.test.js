@@ -1,7 +1,7 @@
-const Lexer = require("./lexer");
-const Parser = require("./parser");
-const { Stream } = require("./parsing");
-const { NodeType, Operator } = require("./constants");
+const Lexer = require("./Lexer");
+const Parser = require("./Parser");
+const { Stream } = require("./Parsing");
+const { NodeType, Operator } = require("./Constants");
 
 function parse(source) {
     return discard_position(Parser.parse(Lexer.lex(Stream(source))));
@@ -61,14 +61,6 @@ test("Parser.Symbol", function() {
     expect(parse(".test")).toEqual(
         { type: NodeType.Module, block: [
             { type: NodeType.Symbol, value: ".test" },
-        ] }
-    );
-});
-
-test("Parser.Builtin", function() {
-    expect(parse("test")).toEqual(
-        { type: NodeType.Module, block: [
-            { type: NodeType.Builtin, value: "test" },
         ] }
     );
 });
@@ -248,7 +240,7 @@ test("Parser.Assignment", function() {
     `)).toEqual(
         { type: NodeType.Module, block: [
             { type: NodeType.Assignment,
-                identifier: { type: NodeType.Identifier, value: "x" },
+                target: { type: NodeType.Identifier, value: "x" },
                 accesses: [],
                 expression: { type: NodeType.Nothing },
             },
@@ -259,7 +251,7 @@ test("Parser.Assignment", function() {
     `)).toEqual(
         { type: NodeType.Module, block: [
             { type: NodeType.Assignment,
-                identifier: { type: NodeType.Identifier, value: "x" },
+                target: { type: NodeType.Identifier, value: "x" },
                 accesses: [
                     { type: NodeType.Access,
                         key: { type: NodeType.Symbol, value: ".y" },
@@ -274,7 +266,7 @@ test("Parser.Assignment", function() {
     `)).toEqual(
         { type: NodeType.Module, block: [
             { type: NodeType.Assignment,
-                identifier: { type: NodeType.Identifier, value: "x" },
+                target: { type: NodeType.Identifier, value: "x" },
                 accesses: [
                     { type: NodeType.Access,
                         key: { type: NodeType.Symbol, value: ".y" },

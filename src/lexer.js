@@ -1,9 +1,8 @@
 const { 
     TokenType, 
-    Builtins, 
     Keywords, 
     Operators,
-} = require("./constants");
+} = require("./Constants");
 const { 
     regex, 
     all,
@@ -11,7 +10,7 @@ const {
     many,
     map,
     must,
-} = require("./parsing");
+} = require("./Parsing");
 
 function map_type(type, parser) {
     return map(function(match, position, stream) {
@@ -112,9 +111,6 @@ const identifier = map(function(match, position, stream) {
     }
     if (Keywords.includes(value)) {
         return { type: TokenType.Keyword, position, length, value };
-    }
-    if (Builtins.includes(value)) {
-        return { type: TokenType.Builtin, position, length, value };
     }
     return { type: TokenType.Identifier, position, length, value };
 }, regex(/^\w+\??/));
