@@ -1,4 +1,8 @@
-const Opcodes = require("./opcodes");
+// const Opcodes = require("./opcodes");
+const Opcodes = {
+    MODULE: "MODULE",
+    CONST: "CONST",
+};
 
 const V = [ ...Array(2 ** 8).keys() ];
 const ARGS = V[0];

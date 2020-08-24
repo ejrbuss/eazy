@@ -1,6 +1,6 @@
 const Lexer = require("./lexer");
 const { Stream } = require("./parsing");
-const { NodeType } = require("./constants");
+const { TokenType } = require("./constants");
 
 function lex(source) {
     return discard_position(Lexer.lex(Stream(source)));
@@ -21,110 +21,110 @@ function discard_position(ast) {
 
 test("Lexer.ExplicitTermiantor", function() {
     expect(lex(";")).toEqual([
-        { type: NodeType.ExplicitTerminator, value: ";" },
+        { type: TokenType.ExplicitTerminator, value: ";" },
     ]);
 });
 
 test("Lexer.ImplicitTermiantor", function() {
     expect(lex("\n")).toEqual([
-        { type: NodeType.ImplicitTerminator, value: "\n" },
+        { type: TokenType.ImplicitTerminator, value: "\n" },
     ]);
 });
 
 test("Lexer.Whitespace", function() {
     expect(lex(" \t ")).toEqual([
-        { type: NodeType.Whitespace, value: " \t " },
+        { type: TokenType.Whitespace, value: " \t " },
     ]);
 });
 
 test("Lexer.Punctuation", function() {
     expect(lex(",()[]{}")).toEqual([
-        { type: NodeType.Punctuation, value: "," },
-        { type: NodeType.Punctuation, value: "(" },
-        { type: NodeType.Punctuation, value: ")" },
-        { type: NodeType.Punctuation, value: "[" },
-        { type: NodeType.Punctuation, value: "]" },
-        { type: NodeType.Punctuation, value: "{" },
-        { type: NodeType.Punctuation, value: "}" },
+        { type: TokenType.Punctuation, value: "," },
+        { type: TokenType.Punctuation, value: "(" },
+        { type: TokenType.Punctuation, value: ")" },
+        { type: TokenType.Punctuation, value: "[" },
+        { type: TokenType.Punctuation, value: "]" },
+        { type: TokenType.Punctuation, value: "{" },
+        { type: TokenType.Punctuation, value: "}" },
     ]);
 });
 
 test("Lexer.Operator", function() {
     expect(lex("<=")).toEqual([
-        { type: NodeType.Operator, value: "<=" },
+        { type: TokenType.Operator, value: "<=" },
     ]);
 });
 
 test("Lexer.Nothing", function() {
     expect(lex("Nothing")).toEqual([
-        { type: NodeType.Nothing, value: undefined },
+        { type: TokenType.Nothing, value: undefined },
     ])
 });
 
 test("Lexer.Boolean", function() {
     expect(lex("True")).toEqual([
-        { type: NodeType.Boolean, value: true },
+        { type: TokenType.Boolean, value: true },
     ]);
     expect(lex("False")).toEqual([
-        { type: NodeType.Boolean, value: false },
+        { type: TokenType.Boolean, value: false },
     ]);
 });
 
 test("Lexer.Number", function() {
     expect(lex("0b101")).toEqual([
-        { type: NodeType.Number, value: 0b101 },
+        { type: TokenType.Number, value: 0b101 },
     ]);
     expect(lex("0o1234567")).toEqual([
-        { type: NodeType.Number, value: 0o1234567 },
+        { type: TokenType.Number, value: 0o1234567 },
     ]);
     expect(lex("0x1234_5678_90aB_cDeF")).toEqual([
-        { type: NodeType.Number, value: 0x1234567890aBcDeF },
+        { type: TokenType.Number, value: 0x1234567890aBcDeF },
     ]);
     expect(lex("998")).toEqual([
-        { type: NodeType.Number, value: 998 },
+        { type: TokenType.Number, value: 998 },
     ]);
     expect(lex("3.141_59")).toEqual([
-        { type: NodeType.Number, value: 3.14159 },
+        { type: TokenType.Number, value: 3.14159 },
     ]);
 });
 
 test("Lexer.String", function() {
     expect(lex("\"Test\"")).toEqual([
-        { type: NodeType.String, value: "Test" },
+        { type: TokenType.String, value: "Test" },
     ]);
     expect(lex("\"\ \\\\ \\n \\t \\\" \"")).toEqual([
-        { type: NodeType.String, value: " \\ \n \t \" " },
+        { type: TokenType.String, value: " \\ \n \t \" " },
     ]);
     expect(lex("'Test'")).toEqual([
-        { type: NodeType.String, value: "Test" },
+        { type: TokenType.String, value: "Test" },
     ]);
     expect(lex("' \\n \\' \\\\' \\ '")).toEqual([
-        { type: NodeType.String, value: " \\n ' \\' \\ " },
+        { type: TokenType.String, value: " \\n ' \\' \\ " },
     ]);
 });
 
 test("Lexer.Symbol", function() {
     expect(lex(".symbol_name?")).toEqual([
-        { type: NodeType.Symbol, value: ".symbol_name?" },
+        { type: TokenType.Symbol, value: ".symbol_name?" },
     ]);
 });
 
 test("Lexer.Identifier", function() {
     expect(lex("identifier")).toEqual([
-        { type: NodeType.Identifier, value: "identifier" },
+        { type: TokenType.Identifier, value: "identifier" },
     ]);
 });
 
 test("Lexer.Builtin", function() {
     expect(lex("List")).toEqual([
-        { type: NodeType.Builtin, value: "List" },
+        { type: TokenType.Builtin, value: "List" },
     ]);
 });
 
 test("Lexer.Doc", function() {
   expect(lex("------let")).toEqual([
-    { type: NodeType.Doc, value: "------" },
-    { type: NodeType.Keyword, value: "let" },
+    { type: TokenType.Doc, value: "------" },
+    { type: TokenType.Keyword, value: "let" },
   ]);
 });
 

@@ -149,11 +149,30 @@ const Operator = {
     Negative: "Negative",
 };
 
+const TokenType = {
+    Symbol: "Symbol",
+    String: "String",
+    Number: "Number",
+    Boolean: "Boolean",
+    Nothing: "Nothing",
+    Identifier: "Identifier",
+    Keyword: "Keyword",
+    Builtin: "Builtin",
+    Operator: "Operator",
+    Doc: "Doc",
+    ExplicitTerminator: "ExplicitTerminator",
+    ImplicitTerminator: "ImplicitTerminator",
+    Punctuation: "Punctuation",
+    Comment: "Comment",
+    Whitespace: "Whitespace",
+};
+
 module.exports = {
     Operators,
     Keywords,
     Intrinsics,
     Builtins,
     NodeType, 
+    TokenType,
     Operator,
 };
