@@ -2,6 +2,7 @@ const Util = require("util");
 const Analysis = require("./Analysis");
 const { NodeType, Builtins } = require("./Constants");
 const { visit_children } = require("./Analysis");
+const { ErrorType, WarningType } = require("./ErrorHandling");
 
 /*
 
@@ -20,6 +21,18 @@ Maybe consider refactoring to actually be breadth-first. However it's less
 clear how in that model ScopeOpeners pass a fresh scope to their children
 
 */
+
+function get_declaration(name, scopes) {
+    if (name in scopes.local_scope) {
+        return scopes.local_scope[name];
+    }
+    if (name in scopes.inner_scope) {
+        return scopes.inner_scope[name];
+    }
+    if (name in scopes.outer_scope) {
+        return scopes.outer_scope[name];
+    }
+}
 
 function open_local_scope(scopes) {
     return {
@@ -45,21 +58,35 @@ function open_inner_scope(scopes) {
 }
 
 function declare_in_local_scope(node) {
-    const name = node.value;
-    const scopes = node.scopes;
-    // Check for redeclaration
-    if (name in scopes.local_scope) {
-        throw new Error("Variable Redeclaration Error: " + Util.inspect({
-            scopes,
-            node,
-        }));
+    const { value: name, scopes } = node;
+    // Check for declaration and push node onto the redeclaration list
+    const declaration = get_declaration(name, scopes);
+    if (declaration !== undefined) {
+        declaration.redeclarations.push(node);
+        return;
     }
+    // Otherwise we are safe to create a new declaration
     scopes.local_scope[name] = {
+        redeclarations: [],
         declaring_node: node,
         assignments: 0,
-        shadowing: false,
+        uses: 0,
         name,
     };
+}
+
+function update_assignment(node) {
+    const declaration = get_declaration(node.value, node.scopes);
+    if (declaration !== undefined) {
+        declaration.assignments += 1;
+    }
+}
+
+function update_usage(node) {
+    const declaration = get_declaration(node.value, node.scopes);
+    if (declaration !== undefined) {
+        declaration.uses += 1;
+    }
 }
 
 const OpensLocalScopeTypes = [
@@ -79,19 +106,20 @@ const OpensInnerScopeTypes = [
 const create_scope_visitors = {
 
     [Analysis.DefaultVisitor]: function(node, ctx) {
-        // Create a new scope for scope openers
         if (OpensLocalScopeTypes.includes(node.type)) {
             ctx.unvisited_node_ctx_thunk_pairs.push([node, function() {
                 return { ...ctx, scopes: open_local_scope(ctx.scopes) };
             }]);
-        } else if (OpensInnerScopeTypes.includes(node.type)) {
+            return;
+        } 
+        if (OpensInnerScopeTypes.includes(node.type)) {
             ctx.unvisited_node_ctx_thunk_pairs.push([node, function() {
                 return { ...ctx, scopes: open_inner_scope(ctx.scopes) };
             }]);
-        } else {
-            node.scopes = ctx.scopes;
-            Analysis.visit_children(create_scope_visitors, node, ctx);
+            return;
         }
+        node.scopes = ctx.scopes;
+        Analysis.visit_children(create_scope_visitors, node, ctx);
     },
 
     [NodeType.Module]: function(node, ctx) {
@@ -105,162 +133,173 @@ const create_scope_visitors = {
         }
     },
 
-    [NodeType.Declaration]: function(node, ctx) {
+    [NodeType.Pattern]: function(node, ctx) {
         node.scopes = ctx.scopes;
         const declaration_ctx = { ...ctx, in_declaration: true };
-        Analysis.visit_node(create_scope_visitors, node.pattern, declaration_ctx);
-        Analysis.visit_node(create_scope_visitors, node.doc, ctx);
-        Analysis.visit_node(create_scope_visitors, node.expression, ctx);
-    },
-
-    [NodeType.Identifier]: function(node, ctx) {
-        node.scopes = ctx.scopes;
-        if (ctx.in_declaration) {
-            declare_in_local_scope(node);
-        }
-    },
-
-    [NodeType.Builtin]: function(node, ctx) {
-        node.scopes = ctx.scopes;
-        if (ctx.in_declaration) {
-            declare_in_local_scope(node);
-        }
-    },
-
-};
-
-function check_if_in_scope(node) {
-
-    // Builtins are always in scope
-    if (Builtins.includes(node.value)) {
-        return;
-    }
-
-    const name = node.value;
-    const scopes = node.scopes;
-
-    if (name in scopes.local_scope) {
-        const declaring_node = scopes.local_scope[name].declaring_node;
-        // Used before declaration
-        if (declaring_node.position > node.position) {
-            // TODO better erros
-            throw new Error("Variable Undeclared Error: " + Util.inspect({
-                scopes,
-                node,
-            }));
-        }
-        return;
-    }
-
-    if (name in scopes.inner_scope) {
-        const declaring_node = scopes.inner_scope[name].declaring_node;
-        // Used before declaration
-        if (declaring_node.position > node.position) {
-            // TODO better erros
-            throw new Error("Variable Undeclared Error: " + Util.inspect({
-                scopes,
-                node,
-            }));
-        }
-        return;
-    }
-
-    if (name in scopes.outer_scope) {
-        // If the name is in local scope we don't care where it is declared
-        return;
-    }
-
-    // TODO better erros, eg. "did you mean"
-    throw new Error("Variable Undeclared Error: " + Util.inspect({
-        scopes,
-        node,
-    }));
-}
-
-function update_scope_declaration(node) {
-    const name = node.value;
-    const scopes = node.scopes;
-    const shadowing = (node.type === NodeType.Builtin
-        || name in scopes.inner_scope
-        || name in scopes.outer_scope
-    );
-    scopes.local_scope[name].shadowing = shadowing;
-}
-
-function update_scope_assignment(node) {
-    const name = node.value;
-    const scopes = node.scopes;
-    const declaration = (scopes.local_scope[name] 
-        || scopes.inner_scope[name]
-        || scopes.outer_scope[name]
-    );
-    declaration.assignments += 1;
-}
-
-// Redeclarations, undeclared variables, shadowing, constants
-const check_scope_visitor = {
-    
-    [Analysis.DefaultVisitor]: function(node, ctx) {
-        visit_children(check_scope_visitor, node, ctx);
-    },
-
-    [NodeType.Declaration]: function(node, ctx) {
-        const declaration_ctx = { ...ctx, in_declaration: true };
-        Analysis.visit_node(check_scope_visitor, node.pattern, declaration_ctx);
-        Analysis.visit_node(check_scope_visitor, node.doc, ctx);
-        Analysis.visit_node(check_scope_visitor, node.expression, ctx);
+        Analysis.visit_children(create_scope_visitors, node, declaration_ctx);
     },
 
     [NodeType.Assignment]: function(node, ctx) {
+        node.scopes = ctx.scopes;
         if (node.accesses.length === 0) {
             const assignment_ctx = { ...ctx, in_assignment: true };
-            Analysis.visit_node(check_scope_visitor, node.target, assignment_ctx);
-        } else {
-            Analysis.visit_node(check_scope_visitor, node.target, ctx);
+            Analysis.visit_node(create_scope_visitors, node.target, assignment_ctx);
+            Analysis.visit_node(create_scope_visitors, node.expression, ctx);
+            return;
         }
-        Analysis.visit_node(check_scope_visitor, node.accesses, ctx);
-        Analysis.visit_node(check_scope_visitor, node.expression, ctx);
+        Analysis.visit_children(create_scope_visitors, node, ctx);
     },
 
     [NodeType.Identifier]: function(node, ctx) {
-        check_if_in_scope(node);
+        node.scopes = ctx.scopes;
         if (ctx.in_declaration) {
-            update_scope_declaration(node);
+            declare_in_local_scope(node);
+            return;
         }
         if (ctx.in_assignment) {
-            update_scope_assignment(node);
+            update_assignment(node);
+            return;
         }
-    },
-
-    [NodeType.Builtin]: function(node, ctx) {
-        check_if_in_scope(node);
-        if (ctx.in_declaration) {
-            update_scope_declaration(node);
-        }
-        if (ctx.in_assignment) {
-            update_scope_assignment(node);
-        }
+        update_usage(node);
     },
 
 };
 
-function scope_analysis(ast) {
+function check_declaration(node, ctx) {
+    const { value: name, scopes } = node;    
+    const declaration = get_declaration(name, scopes);
+
+    // if node is a redeclaration we skip
+    // the declaring node will handle the error
+    if (node !== declaration.declaring_node) {
+        return;
+    }
+
+    if (declaration.redeclarations.length !== 0) {
+        ctx.errors.push({
+            type: ErrorType.Redeclared,
+            declaration,
+        });
+    }
+
+    if (Builtins.includes(name)) {
+        ctx.errors.push({
+            type: ErrorType.RedeclaredBuiltin,
+            declaration,
+        });
+    }
+
+    if (declaration.uses === 0) {
+        ctx.warnings.push({
+            type: WarningType.Unused,
+            declaration,
+        });
+    }
+}
+
+function check_assignment(node, ctx) {
+    // Do the same work as check_usage
+    check_usage(node, ctx);
+
+    if (Builtins.includes(node.value)) {
+        ctx.errors.push({
+            type: ErrorType.AssignedToBuiltin,
+            node,
+        });
+    }
+}
+
+function check_usage(node, ctx) {
+    const { value: name, scopes } = node;
+    const declaration = get_declaration(name, scopes);
+
+    // We don't care about builtin usage
+    if (Builtins.includes(name)) {
+        return;
+    }
+
+    if (declaration === undefined) {
+        ctx.errors.push({
+            type: ErrorType.Undeclared,
+            node,
+        });
+        return;
+    }
+
+    if (name in scopes.local_scope || name in scopes.inner_scope) {
+        if (node.position < declaration.declaring_node.position) {
+            // we want to update usage data so that we only have the one error
+            // in the case of unsued variable
+            declaration.uses = Math.max(declaration.uses, 1);
+            ctx.errors.push({
+                type: ErrorType.UsedBeforeDeclared,
+                node,
+                declaration,
+            });
+        }
+    }
+}
+
+const check_scope_visitors = {
+    
+    [Analysis.DefaultVisitor]: function(node, ctx) {
+        visit_children(check_scope_visitors, node, ctx);
+    },
+
+    [NodeType.Pattern]: function(node, ctx) {
+        const declaration_ctx = { ...ctx, in_declaration: true };
+        Analysis.visit_children(check_scope_visitors, node, declaration_ctx);
+    },
+
+    [NodeType.Assignment]: function(node, ctx) {
+        node.scopes = ctx.scopes;
+        if (node.accesses.length === 0) {
+            const assignment_ctx = { ...ctx, in_assignment: true };
+            Analysis.visit_node(check_scope_visitors, node.target, assignment_ctx);
+            Analysis.visit_node(check_scope_visitors, node.expression, ctx);
+            return;
+        }
+        Analysis.visit_children(check_scope_visitors, node, ctx);
+    },
+
+    [NodeType.Identifier]: function(node, ctx) {
+        if (ctx.in_declaration) {
+            check_declaration(node, ctx);
+            return;
+        }
+        if (ctx.in_assignment) {
+            check_assignment(node, ctx);
+            return;
+        }
+        check_usage(node, ctx);
+    },
+
+};
+
+function scope_analysis(analysis_ctx) {
+    const { ast, errors, warnings } = analysis_ctx;
     Analysis.visit_node(create_scope_visitors, ast, {
         unvisited_node_ctx_thunk_pairs: [],
         in_declaration: false,
+        in_assignment: false,
         scopes: {
             local_scope: {},
             inner_scope: {},
             outer_scope: {},
         },
+        errors,
+        warnings,
     });
-    Analysis.visit_node(check_scope_visitor, ast, {
+    Analysis.visit_node(check_scope_visitors, ast, {
         in_declaration: false,
         in_assignment: false,
+        errors,
+        warnings,
     });
-    return ast;
+    return { ast, errors, warnings };
 }
 
 module.exports = {
     scope_analysis,
+    get_declaration,
 };

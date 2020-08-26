@@ -86,7 +86,7 @@ const pair = lazy(function() {
         choice(
             named_sequence(
                 "key", expression,
-                token_with_value(":"),
+                token_with_value("="),
                 "value", must(expression),
             ),
             named_sequence(
@@ -523,7 +523,7 @@ const pattern_pair = lazy(function() {
         choice(
             named_sequence(
                 "key", pattern,
-                token_with_value(":"),
+                token_with_value("="),
                 "value", must(pattern),
             ),
             named_sequence(

@@ -1,6 +1,8 @@
 const Language = require("./language");
 const { scope_analysis } = require("./ScopeAnalysis");
 
+const Util = require("util");
+
 function remove_declaring_nodes(scopes) {
     function remove_declaring_nodes(scope) {
         const names = Object.keys(scope);
@@ -14,128 +16,89 @@ function remove_declaring_nodes(scopes) {
     return scopes;
 }
 
-test("ScopeAnalysis.ValidDeclarations", function() {
-    scope_analysis(Language.parse_string(`
-        let x = 4
-        x = 5
-    `));
-    scope_analysis(Language.parse_string(`
-        let x = 4
-        x = 5
-        do {
-            x = 7
-            let y = 5
-        }
-    `));
-    scope_analysis(Language.parse_string(`
-        let x = 4
-        x = 5
-        Function {
-            y = 7
-        }
-        let y = 4
-    `));
-    scope_analysis(Language.parse_string(`
-        let count = 5
-        count = 6
-    `));
-    scope_analysis(Language.parse_string(`
-        print("Hello, world!")
-    `));
-    scope_analysis(Language.parse_string(`
-        let count = count(List [ 1, 2, 3 ])
-    `));
-});
-
-test("ScopeAnalysis.UndeclaredErrors", function() {
-    expect(function() {
-        scope_analysis(Language.parse_string(`
-            x = 5
-        `))
-    }).toThrow();
-    expect(function() {
-        scope_analysis(Language.parse_string(`
-            x = 5
-            let x = 6
-        `))
-    }).toThrow();
-    expect(function() {
-        scope_analysis(Language.parse_string(`
-            let x = 5
-            let x = 6
-        `))
-    }).toThrow();
-    expect(function() {
-        scope_analysis(Language.parse_string(`
-            do {
-                x = 5
-            }
-            let x = 6
-        `))
-    }).toThrow();
-    expect(function() {
-        scope_analysis(Language.parse_string(`
-            count = 5 
-        `))
-    }).toThrow();
-    expect(function() {
-        scope_analysis(Language.parse_string(`
-            let x = 4
-            do {
-                x = 6
-                let x = 7
-            }
-        `))
-    }).toThrow();
-});
-
-test("ScopeAnalysis.CheckScopes", function() {
-    expect(
-        remove_declaring_nodes(scope_analysis(Language.parse_string(`
-            let w = 4
-            Function {
-                let x = 6
-                do {
-                    let x = 6
-                    let y = 7 
-                    y = 8
-                }
-                x = 2
-                x = x + 1
-            }
-            let z = 5
-        `)).block[1].cases[0].block[1].scopes)
-    ).toEqual({
-        local_scope: {
-            x: {
-                name: "x",
-                assignments: 0,
-                shadowing: true,
-            },
-            y: {
-                name: "y",
-                assignments: 1,
-                shadowing: false,
-            }
-        },
-        inner_scope: {
-            x: {
-                name: "x",
-                assignments: 2,
-                shadowing: false,
-            },
-        },
-        outer_scope: {
-            w: {
-                name: "w",
-                assignments: 0,
-                shadowing: false,
-            },
-            z: {
-                name: "z",
-                assignments: 0,
-                shadowing: false,
-            },
-        }
+function expect_analysis(source, no_errors, no_warnings) {
+    const analysis = scope_analysis({
+        ast: Language.parse_string(source),
+        errors: [],
+        warnings: [],
     });
+    if (analysis.errors.length !== no_errors || analysis.warnings.length !== no_warnings) {
+        console.log(Util.inspect(analysis.errors, { depth: 1000 }));
+        console.log(Util.inspect(analysis.warnings, { depth: 1000 }));
+    }
+    expect(analysis.errors.length).toBe(no_errors);
+    expect(analysis.warnings.length).toBe(no_warnings);
+}
+
+test("ScopeAnalysis.ValidDeclarations", function() {
+    expect_analysis(`
+        let x = 4
+        print(x)
+    `, 0, 0);
+    expect_analysis(`
+        let x = 4
+        let y = 5
+        print(x + y)
+    `, 0, 0);
+    expect_analysis(`
+        let x = 4
+        do {
+            x = 3
+            print(x)
+        }
+        print(x)
+    `, 0, 0);
+    expect_analysis(`
+        Function {
+            print(x)
+        }
+        let x = 4
+    `, 0, 0);
+    expect_analysis(`
+        let x = 4
+        do {
+            print(x)
+        }
+        do {
+            let y = 7
+            Function {
+                x = 4
+                print(x + y)
+            }
+        }
+        do {
+            let y = 7
+            print(y)
+        }
+    `, 0, 0);
+});
+
+test("ScopeAnalysis.WarnedDeclarations", function() {
+    expect_analysis(`
+        let x = 4
+    `, 0, 1);
+});
+
+test("ScopeAnalysis.ErroredDeclarations", function() {
+    expect_analysis(`
+        let x = 4
+        let x = 5
+    `, 1, 1);
+    expect_analysis(`
+        let count = 4
+    `, 1, 1);
+    expect_analysis(`
+        print(x)
+    `, 1, 0);
+    expect_analysis(`
+        print(x)
+        let x = 4
+    `, 1, 0);
+    expect_analysis(`
+        count = 4
+    `, 1, 0);
+});
+
+test("ScopeAnalysis.ScopeExample", function() {
+
 });

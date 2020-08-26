@@ -43,10 +43,6 @@ const Keywords = [
     "todo",
 ];
 
-const Intrinsics = [
-    "@bytecode",
-];
-
 const Builtins = [
     // Values
     "Boolean",
@@ -76,43 +72,51 @@ const Builtins = [
     "count",
     "copy",
     "merge" ,
-    "update",
+    "help",
+    "breakpoint",
     "print",
     "input",
-    "help",
-    "main",
 ];
 
 const NodeType = {
+
+    // Structural
     Module: "Module",
     Declaration: "Declaration",
+    Assignment: "Assignment",
+    Pair: "Pair",
+    Case: "Case",
+    ElseCase: "ElseCase",
+    Pattern: "Pattern",
+
+    // Control flow
     Return: "Return",
     Throw: "Throw",
-    Assignment: "Assignment",
-    BinaryOperator: "BinaryOperator",
-    UnaryOperator: "UnaryOperator",
-    ListExpression: "ListExpression",
-    MapExpression: "MapExpression",
-    Pair: "Pair",
-    Symbol: "Symbol",
-    String: "String",
-    Number: "Number",
-    Boolean: "Boolean",
-    Nothing: "Nothing",
     IfExpression: "IfExpression",
     DoExpression: "DoExpression",
     WhileExpression: "WhileExpression",
     MatchExpression: "MatchExpression",
     ForExpression: "ForExpression",
     TryExpression: "TryExpression",
+
+    // Expression
+    BinaryOperator: "BinaryOperator",
+    UnaryOperator: "UnaryOperator",
+    ListExpression: "ListExpression",
+    MapExpression: "MapExpression",
     Function: "Function",
-    Case: "Case",
-    ElseCase: "ElseCase",
     Call: "Call",
     Access: "Access",
-    Pattern: "Pattern",
-    // Token Node Types
+
+    // Primitive
+    Nothing: "Nothing",
+    Boolean: "Boolean",
+    Number: "Number",
+    String: "String",
+    Symbol: "Symbol",
     Identifier: "Identifier",
+    
+    // Token
     Keyword: "Keyword",
     Operator: "Operator",
     Doc: "Doc",
@@ -169,7 +173,6 @@ const TokenType = {
 module.exports = {
     Operators,
     Keywords,
-    Intrinsics,
     Builtins,
     NodeType, 
     TokenType,

@@ -158,7 +158,7 @@ test("Parser.Pattern", function() {
         ] }
     );
     expect(parse(`
-        let Map [ key: value ] = Nothing
+        let Map [ key = value ] = Nothing
     `)).toEqual(
         { type: NodeType.Module, block: [
             { type: NodeType.Declaration,
@@ -838,7 +838,7 @@ test("Parser.MapLiteral", function() {
         ] }
     );
     expect(parse(`
-        Map [ .x: Nothing, ...x ]
+        Map [ .x = Nothing, ...x ]
     `)).toEqual(
         { type: NodeType.Module, block: [
             { type: NodeType.MapExpression, pairs: [

@@ -43,7 +43,7 @@ pattern_pairs
     = [ pattern_pair ] { "," pattern_pair } [ ","] 
 
 pattern_pair
-    = pattern ":" pattern
+    = pattern "=" pattern
     | <identifier>
 
 simple_literal
@@ -212,7 +212,7 @@ pairs
 
 pair
     = "..." operator_free_expresion
-    | expression ":" expression
+    | expression "=" expression
     | <identifier>
 
 simple_expression
