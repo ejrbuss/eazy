@@ -65,8 +65,6 @@ async function eval_ir(ir, vm) {
 
     };
 
-
-
 }
 
 export default {
