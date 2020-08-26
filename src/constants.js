@@ -1,4 +1,4 @@
-const Operators = [
+export const Operators = [
     "is",
     "not",
     "and",
@@ -24,7 +24,7 @@ const Operators = [
     "in",
 ];
 
-const Keywords = [
+export const Keywords = [
     "let",
     "as",
     "if",
@@ -43,7 +43,7 @@ const Keywords = [
     "todo",
 ];
 
-const Builtins = [
+export const Builtins = [
     // Values
     "Boolean",
     "Number",
@@ -78,7 +78,7 @@ const Builtins = [
     "input",
 ];
 
-const NodeType = {
+export const NodeType = {
 
     // Structural
     Module: "Module",
@@ -127,7 +127,7 @@ const NodeType = {
     Whitespace: "Whitespace",
 };
 
-const Operator = {
+export const Operator = {
     Range: "Range",
     Spread: "Spread",
     Or: "Or",
@@ -152,7 +152,7 @@ const Operator = {
     Negative: "Negative",
 };
 
-const TokenType = {
+export const TokenType = {
     Symbol: "Symbol",
     String: "String",
     Number: "Number",
@@ -168,13 +168,4 @@ const TokenType = {
     Punctuation: "Punctuation",
     Comment: "Comment",
     Whitespace: "Whitespace",
-};
-
-module.exports = {
-    Operators,
-    Keywords,
-    Builtins,
-    NodeType, 
-    TokenType,
-    Operator,
 };

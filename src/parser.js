@@ -1,7 +1,8 @@
-const { 
+import { 
     NodeType,
     Operator,
-} = require("./Constants");
+} from "./Constants.js";
+import Parsing from "./Parsing.js";
 const {
     Stream,
     Parser, 
@@ -21,7 +22,7 @@ const {
     map_to_nth,
     map_into,
     named_sequence,
-} = require("./Parsing");
+} = Parsing;
 
 function token_of_type(type) {
     return Parser(function(stream) {
@@ -642,6 +643,6 @@ function parse(tokens) {
     return module_(Stream(tokens));
 }
 
-module.exports = { 
+export default { 
     parse,
 };

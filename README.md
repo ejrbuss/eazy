@@ -1072,13 +1072,7 @@ match result {
    - Pattern match to the correct message
  - analysis
    - ScopeAnalysis (create scope object, mark constants, assignments, unused)
-   - DeadCodeAnalysis (find and mark dead code)
-   - ReturnAnalysis (find and mark variables that are returned)
-   - EscapeAnalysis (find and mark variables that escape their function)
-   - ConstantAnalysis (find and mark constant expressions)
  - desguar
-   - eliminate unused variables
-   - eliminate dead code 
    - eliminate do expression
    - eliminate for expression
    - eliminate match expression
@@ -1086,6 +1080,14 @@ match result {
    - eliminate one armed if 
  - Code gen
    // later
+   - analysis
+      - ConstantAnalysis (find and mark constant expressions)
+      - DeadCodeAnalysis (find and mark dead code)
+      - ReturnAnalysis (find and mark variables that are returned)
+      - EscapeAnalysis (find and mark variables that escape their function)
+   - desugar
+      - eliminate unused variables
+      - eliminate dead code 
    - optimization loop
       - Peephole optimizations
       - constant folding

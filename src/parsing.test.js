@@ -1,3 +1,4 @@
+import Parsing from "./Parsing";
 const { 
     Stream, 
     literal, 
@@ -25,7 +26,7 @@ const {
     map_error,
     filter,
     at_least_n,
-} = require("./Parsing");
+} = Parsing;
 
 test("Parsing.literal", function() {
     expect(literal("abc")(Stream("abcdef"))).toBe("abc");

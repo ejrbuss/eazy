@@ -1,8 +1,6 @@
-const Util = require("util");
-const Analysis = require("./Analysis");
-const { NodeType, Builtins } = require("./Constants");
-const { visit_children } = require("./Analysis");
-const { ErrorType, WarningType } = require("./ErrorHandling");
+import Analysis from "./Analysis.js";
+import { NodeType, Builtins } from "./Constants.js";
+import { ErrorType, WarningType } from "./ErrorHandling.js";
 
 /*
 
@@ -22,7 +20,7 @@ clear how in that model ScopeOpeners pass a fresh scope to their children
 
 */
 
-function get_declaration(name, scopes) {
+export function get_declaration(name, scopes) {
     if (name in scopes.local_scope) {
         return scopes.local_scope[name];
     }
@@ -243,7 +241,7 @@ function check_usage(node, ctx) {
 const check_scope_visitors = {
     
     [Analysis.DefaultVisitor]: function(node, ctx) {
-        visit_children(check_scope_visitors, node, ctx);
+        Analysis.visit_children(check_scope_visitors, node, ctx);
     },
 
     [NodeType.Pattern]: function(node, ctx) {
@@ -276,7 +274,7 @@ const check_scope_visitors = {
 
 };
 
-function scope_analysis(analysis_ctx) {
+export function scope_analysis(analysis_ctx) {
     const { ast, errors, warnings } = analysis_ctx;
     Analysis.visit_node(create_scope_visitors, ast, {
         unvisited_node_ctx_thunk_pairs: [],
@@ -296,10 +294,5 @@ function scope_analysis(analysis_ctx) {
         errors,
         warnings,
     });
-    return { ast, errors, warnings };
+    return analysis_ctx;
 }
-
-module.exports = {
-    scope_analysis,
-    get_declaration,
-};

@@ -1,6 +1,5 @@
-const ErrorType = {
+export const ErrorType = {
     // Lexing
-    LargeNumber: "LargeNumber",
     UnexpectedCharacters: "UnexpectedCharacters",
 
     // Parinsg
@@ -14,7 +13,7 @@ const ErrorType = {
     AssignedToBuiltin: "AssignedToBuiltin",
 };
 
-const WarningType = {
+export const WarningType = {
     // Scope analysis
     Unused: "Unused",
 
@@ -26,9 +25,4 @@ const WarningType = {
 
     // Typing
     AlwaysTypeError: "AlwaysTypeError", 
-};
-
-module.exports = {
-    ErrorType,
-    WarningType,
 };

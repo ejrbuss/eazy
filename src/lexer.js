@@ -1,8 +1,9 @@
-const { 
+import { 
     TokenType, 
     Keywords, 
     Operators,
-} = require("./Constants");
+} from "./Constants.js";
+import Parsing from "./Parsing.js";
 const { 
     regex, 
     all,
@@ -10,7 +11,7 @@ const {
     many,
     map,
     must,
-} = require("./Parsing");
+} = Parsing;
 
 function map_type(type, parser) {
     return map(function(match, position, stream) {
@@ -136,6 +137,6 @@ const token = choice(
 
 const lex = must(all(many(token)));
 
-module.exports = {
+export default {
     lex,
 };

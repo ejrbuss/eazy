@@ -1,7 +1,7 @@
-const Lexer = require("./Lexer");
-const Parser = require("./Parser");
-const { Stream } = require("./Parsing");
-const { NodeType, Operator } = require("./Constants");
+import Lexer from "./Lexer.js";
+import Parser from "./Parser.js";
+import { Stream } from "./Parsing.js";
+import { NodeType, Operator } from "./Constants.js";
 
 function parse(source) {
     return discard_position(Parser.parse(Lexer.lex(Stream(source))));

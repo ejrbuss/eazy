@@ -1,6 +1,6 @@
-const Lexer = require("./Lexer");
-const { Stream } = require("./Parsing");
-const { TokenType } = require("./Constants");
+import Lexer from "./Lexer.js";
+import { Stream } from "./Parsing.js";
+import { TokenType } from "./Constants.js";
 
 function lex(source) {
     return discard_position(Lexer.lex(Stream(source)));

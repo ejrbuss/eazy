@@ -1,21 +1,21 @@
-import { NodeType, TokenType } from "./Constants"; 
+import { NodeType, TokenType } from "./Constants.js"; 
 
-const DefaultVisitor = "DefaultVisitor";
+export const DefaultVisitor = "DefaultVisitor";
 
-function is_token(node) {
+export function is_token(node) {
     return (is_node(node)
         && node.type in TokenType
     );
 }
 
-function is_node(node) {
+export function is_node(node) {
     return (typeof node === "object"
         && !Array.isArray(node)
         && node.type in NodeType
     );
 }
 
-function visit_children(visitors, node, ctx) {
+export function visit_children(visitors, node, ctx) {
     const keys = Object.keys(node);
     for (const key of keys) {
         const value = node[key];
@@ -34,7 +34,7 @@ function visit_children(visitors, node, ctx) {
     }
 }
 
-function visit_node(visitors, node, ctx) {
+export function visit_node(visitors, node, ctx) {
     if (is_node(node)) {
         const visitor = visitors[node.type] || visitors[DefaultVisitor];
         return visitor(node, ctx);
@@ -47,11 +47,3 @@ function visit_node(visitors, node, ctx) {
         }
     }
 }
-
-export default {
-    is_token,
-    is_node,
-    DefaultVisitor,
-    visit_children,
-    visit_node,
-};

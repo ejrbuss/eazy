@@ -7,7 +7,7 @@ function check_is_parser(parser) {
     }
 }
 
-function Stream(data) {
+export function Stream(data) {
     return { position: 0, data };
 }
 
@@ -318,7 +318,7 @@ function at_least_n(n, parser) {
     }, parser);
 }
 
-module.exports = {
+export default {
     // Constructors
     Stream,
     Parser,
