@@ -4,7 +4,7 @@ const { Stream } = require("./Parsing");
 const { NodeType, Builtin } = require("./Node");
 
 function parse(source) {
-    return discard_position(Parser.parse(Lexer.lex(Stream(source))));
+    return discard_position(Parser.parse(Lexer.lex(source)));
 }
 
 function discard_position(ast) {

@@ -3,7 +3,7 @@ const { Stream } = require("./Parsing");
 const { TokenType } = require("./Node");
 
 function lex(source) {
-    return discard_position(Lexer.lex(Stream(source)));
+    return discard_position(Lexer.lex(source));
 }
 
 function discard_position(ast) {

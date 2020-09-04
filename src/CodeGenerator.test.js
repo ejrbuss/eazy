@@ -1,6 +1,5 @@
 const CodeGenerator = require("./CodeGenerator");
 
-const { Stream } = require("./Parsing");
 const Lexer = require("./Lexer");
 const Parser = require("./Parser");
 const ScopeAnalysis = require("./ScopeAnalysis");
@@ -9,8 +8,7 @@ const EZIR = require("./EZIR");
 const { ARGS, REG, V, E } = EZIR;
 
 function generate_from_source(source) {
-    const stream = Stream(source);
-    const tokens = Lexer.lex(stream);
+    const tokens = Lexer.lex(source);
     const ast = Parser.parse(tokens);
     const analysis_ctx = { ast, warnings: [], errors: [] };
     ScopeAnalysis.scope_analysis(analysis_ctx);

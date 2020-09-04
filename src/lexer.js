@@ -1,6 +1,7 @@
 const { Keywords, Operators } = require("./Constants");
 const { TokenType } = require("./Node");
 const {
+    Stream,
     regex, 
     all,
     choice,
@@ -133,13 +134,18 @@ const token = choice(
     operator,
 );
 
-const lex = map_error(function(error) {
+const tokens = map_error(function(error) {
     throw new Error({
         type: ErrorType.UnexpectedCharacters,
         stream: error.stream,
     });
 }, must(all(many(token))));
 
+function lex(source) {
+    return tokens(Stream(source));
+}
+
 module.exports = {
+    tokens,
     lex,
 };
