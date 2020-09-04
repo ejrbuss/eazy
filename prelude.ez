@@ -1,0 +1,24 @@
+"Boolean",
+"Number",
+"String",
+"Symbol",
+"List",
+"Map",
+"Function",
+// Predicates
+
+let type = Function {
+    
+}
+
+let Nothing? = Function { annything ->
+    type
+}
+"Boolean?",
+"True?",
+"False?",
+"Number?",
+"String?",
+"Symbol?",
+"List?",
+"Map?",

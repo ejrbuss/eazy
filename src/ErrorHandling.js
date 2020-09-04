@@ -1,8 +1,9 @@
-export const ErrorType = {
+const ErrorType = {
     // Lexing
     UnexpectedCharacters: "UnexpectedCharacters",
 
     // Parinsg
+    UnmatchedSeperators: "UnmatchedSeperators",
     UnexpectedToken: "UnexpectedToken",
 
     // Scope analysis
@@ -13,7 +14,7 @@ export const ErrorType = {
     AssignedToBuiltin: "AssignedToBuiltin",
 };
 
-export const WarningType = {
+const WarningType = {
     // Scope analysis
     Unused: "Unused",
 
@@ -25,4 +26,9 @@ export const WarningType = {
 
     // Typing
     AlwaysTypeError: "AlwaysTypeError", 
+};
+
+module.exports = {
+    ErrorType,
+    WarningType,
 };

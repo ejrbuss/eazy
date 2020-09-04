@@ -1,4 +1,4 @@
-export const Operators = [
+const Operators = [
     "is",
     "not",
     "and",
@@ -24,7 +24,7 @@ export const Operators = [
     "in",
 ];
 
-export const Keywords = [
+const Keywords = [
     "let",
     "as",
     "if",
@@ -40,10 +40,9 @@ export const Keywords = [
     "try",
     "catch",
     "finally",
-    "todo",
 ];
 
-export const Builtins = [
+const Builtins = [
     // Values
     "Boolean",
     "Number",
@@ -52,6 +51,9 @@ export const Builtins = [
     "List",
     "Map",
     "Function",
+    "Box",
+    "Builtin",
+
     // Predicates
     "Nothing?",
     "Boolean?",
@@ -63,12 +65,14 @@ export const Builtins = [
     "List?",
     "Map?",
     "Function?",
+    "Box?",
+    "Builtin?",
+
     // Functions
-    "default",
     "import",
     "export",
-    "test",
     "assert",
+    "test",
     "count",
     "copy",
     "merge" ,
@@ -76,96 +80,11 @@ export const Builtins = [
     "breakpoint",
     "print",
     "input",
+    "type",
 ];
 
-export const NodeType = {
-
-    // Structural
-    Module: "Module",
-    Declaration: "Declaration",
-    Assignment: "Assignment",
-    Pair: "Pair",
-    Case: "Case",
-    ElseCase: "ElseCase",
-    Pattern: "Pattern",
-
-    // Control flow
-    Return: "Return",
-    Throw: "Throw",
-    IfExpression: "IfExpression",
-    DoExpression: "DoExpression",
-    WhileExpression: "WhileExpression",
-    MatchExpression: "MatchExpression",
-    ForExpression: "ForExpression",
-    TryExpression: "TryExpression",
-
-    // Expression
-    BinaryOperator: "BinaryOperator",
-    UnaryOperator: "UnaryOperator",
-    ListExpression: "ListExpression",
-    MapExpression: "MapExpression",
-    Function: "Function",
-    Call: "Call",
-    Access: "Access",
-
-    // Primitive
-    Nothing: "Nothing",
-    Boolean: "Boolean",
-    Number: "Number",
-    String: "String",
-    Symbol: "Symbol",
-    Identifier: "Identifier",
-    
-    // Token
-    Keyword: "Keyword",
-    Operator: "Operator",
-    Doc: "Doc",
-    ExplicitTerminator: "ExplicitTerminator",
-    ImplicitTerminator: "ImplicitTerminator",
-    Punctuation: "Punctuation",
-    Comment: "Comment",
-    Whitespace: "Whitespace",
-};
-
-export const Operator = {
-    Range: "Range",
-    Spread: "Spread",
-    Or: "Or",
-    And: "And",
-    NotEqual: "NotEqual",
-    Equal: "Equal",
-    IsNot: "IsNot",
-    Is: "Is",
-    LessThan: "LessThan",
-    LessThanOrEqualTo: "LessThanOrEqualTo",
-    GreaterThan: "GreaterThan",
-    GreaterThanOrEqualTo: "GreaterThanOrEqualTo",
-    NotIn: "NotIn",
-    In: "In",
-    Add: "Add",
-    Subtract: "Subtract",
-    Multiply: "Multiply",
-    Divide: "Divide",
-    Exponentiate: "Exponentiate",
-    Not: "Not",
-    Positive: "Positive",
-    Negative: "Negative",
-};
-
-export const TokenType = {
-    Symbol: "Symbol",
-    String: "String",
-    Number: "Number",
-    Boolean: "Boolean",
-    Nothing: "Nothing",
-    Identifier: "Identifier",
-    Keyword: "Keyword",
-    Builtin: "Builtin",
-    Operator: "Operator",
-    Doc: "Doc",
-    ExplicitTerminator: "ExplicitTerminator",
-    ImplicitTerminator: "ImplicitTerminator",
-    Punctuation: "Punctuation",
-    Comment: "Comment",
-    Whitespace: "Whitespace",
+module.exports = {
+    Operators,
+    Keywords,
+    Builtins,
 };

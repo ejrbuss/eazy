@@ -1,6 +1,6 @@
-import Parser from "./Parser.js"
-import Lexer from "./Lexer.js";
-import { Stream } from "./Parsing.js";
+const Parser = require("./Parser");
+const Lexer = require("./Lexer");
+const { Stream } = require("./Parsing");
 
 // TODO make this better
 function parse_string(source, filename) {
@@ -9,6 +9,6 @@ function parse_string(source, filename) {
     return ast;
 }
 
-export default {
+module.exports = {
     parse_string,
 };

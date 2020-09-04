@@ -1,4 +1,4 @@
-import { NodeType, TokenType } from "./Constants"; 
+const { NodeType, TokenType } = require("./Node");
 
 const DefaultVisitor = "DefaultVisitor";
 
@@ -48,7 +48,7 @@ function visit_node(visitors, node, ctx) {
     }
 }
 
-export default {
+module.exports = {
     is_token,
     is_node,
     DefaultVisitor,

@@ -1,6 +1,7 @@
-import Analysis from "./Analysis.js";
-import { NodeType, Builtins } from "./Constants.js";
-import { ErrorType, WarningType } from "./ErrorHandling.js";
+const Analysis = require("./Analysis");
+const { NodeType } = require("./Node");
+const { Builtins } = require("./Constants");
+const { ErrorType, WarningType } = require("./ErrorHandling");
 
 /*
 
@@ -20,7 +21,7 @@ clear how in that model ScopeOpeners pass a fresh scope to their children
 
 */
 
-export function get_declaration(name, scopes) {
+function get_declaration(name, scopes) {
     if (name in scopes.local_scope) {
         return scopes.local_scope[name];
     }
@@ -274,7 +275,7 @@ const check_scope_visitors = {
 
 };
 
-export function scope_analysis(analysis_ctx) {
+function scope_analysis(analysis_ctx) {
     const { ast, errors, warnings } = analysis_ctx;
     Analysis.visit_node(create_scope_visitors, ast, {
         unvisited_node_ctx_thunk_pairs: [],
@@ -295,4 +296,9 @@ export function scope_analysis(analysis_ctx) {
         warnings,
     });
     return analysis_ctx;
+}
+
+module.exports = {
+    get_declaration,
+    scope_analysis,
 }

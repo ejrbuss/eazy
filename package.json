@@ -3,12 +3,12 @@
   "version": "0.0.1",
   "description": "## Testing ``` $ pytest --cov-report term-missing --cov ```",
   "main": "index.js",
-  "type": "module",
   "directories": {
     "doc": "doc"
   },
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --verbose"
+    "dev": "next dev",
+    "test": "jest"
   },
   "repository": {
     "type": "git",
@@ -23,8 +23,6 @@
   "devDependencies": {
     "benchmark": "^2.1.4",
     "jest": "^26.1.0",
-    "next": "^9.5.2",
-    "react": "^16.13.1",
-    "react-dom": "^16.13.1"
+    "next": "^9.5.2"
   }
 }

@@ -1,7 +1,7 @@
-import Lexer from "./Lexer.js";
-import Parser from "./Parser.js";
-import { Stream } from "./Parsing.js";
-import { NodeType, Operator } from "./Constants.js";
+const Lexer = require("./Lexer");
+const Parser = require("./Parser");
+const { Stream } = require("./Parsing");
+const { NodeType, Builtin } = require("./Node");
 
 function parse(source) {
     return discard_position(Parser.parse(Lexer.lex(Stream(source))));
@@ -60,7 +60,7 @@ test("Parser.String", function() {
 test("Parser.Symbol", function() {
     expect(parse(".test")).toEqual(
         { type: NodeType.Module, block: [
-            { type: NodeType.Symbol, value: ".test" },
+            { type: NodeType.Symbol, value: Symbol.for("test") },
         ] }
     );
 });
@@ -108,10 +108,12 @@ test("Parser.Pattern", function() {
         { type: NodeType.Module, block: [
             { type: NodeType.Declaration,
                 pattern: { type: NodeType.Pattern, bindings: [
-                    { type: NodeType.BinaryOperator, 
-                        operator: Operator.Range,
-                        left_operand: { type: NodeType.Number, value: -4 },
-                        right_operand: { type: NodeType.Number, value: 5 },
+                    { type: NodeType.Builtin,
+                        builtin: Builtin.Range,
+                        arguments: [ 
+                            { type: NodeType.Number, value: -4 },
+                            { type: NodeType.Number, value: 5 },
+                        ],
                     },
                 ] },
                 expression: { type: NodeType.Nothing },
@@ -124,7 +126,7 @@ test("Parser.Pattern", function() {
         { type: NodeType.Module, block: [
             { type: NodeType.Declaration,
                 pattern: { type: NodeType.Pattern, bindings: [
-                    { type: NodeType.UnaryOperator, operator: Operator.Spread },
+                    { type: NodeType.Spread },
                 ] },
                 expression: { type: NodeType.Nothing },
             }
@@ -136,9 +138,8 @@ test("Parser.Pattern", function() {
         { type: NodeType.Module, block: [
             { type: NodeType.Declaration,
                 pattern: { type: NodeType.Pattern, bindings: [
-                    { type: NodeType.UnaryOperator, 
-                        operator: Operator.Spread, 
-                        operand:  { type: NodeType.Identifier, value: "x" },
+                    { type: NodeType.Spread, 
+                        value:  { type: NodeType.Identifier, value: "x" },
                     },
                 ] },
                 expression: { type: NodeType.Nothing },
@@ -206,6 +207,24 @@ test("Parser.Pattern", function() {
             }
         ] }
     );
+    expect(parse(`
+        let Box [ Nothing ] = Box [ Nothing ]
+    `)).toEqual(
+        { type: NodeType.Module, block: [
+            { type: NodeType.Declaration,
+                pattern: { type: NodeType.Pattern, bindings: [
+                    { type: NodeType.BoxExpression, 
+                        value: { type: NodeType.Pattern, bindings: [
+                            { type: NodeType.Nothing },
+                        ] },
+                    },
+                ] },
+                expression: { type: NodeType.BoxExpression,
+                    value: { type: NodeType.Nothing },
+                },
+            }
+        ] }
+    );
 });
 
 test("Parser.ReturnStatement", function() {
@@ -254,7 +273,7 @@ test("Parser.Assignment", function() {
                 target: { type: NodeType.Identifier, value: "x" },
                 accesses: [
                     { type: NodeType.Access,
-                        key: { type: NodeType.Symbol, value: ".y" },
+                        key: { type: NodeType.Symbol, value: Symbol.for("y") },
                     }
                 ],
                 expression: { type: NodeType.Nothing },
@@ -269,7 +288,7 @@ test("Parser.Assignment", function() {
                 target: { type: NodeType.Identifier, value: "x" },
                 accesses: [
                     { type: NodeType.Access,
-                        key: { type: NodeType.Symbol, value: ".y" },
+                        key: { type: NodeType.Symbol, value: Symbol.for("y") },
                     },
                     { type: NodeType.Access,
                         key: { type: NodeType.Identifier, value: "z" },
@@ -497,6 +516,25 @@ test("Parser.ForExpression", function() {
 
 test("Parser.TryExpression", function() {
     expect(parse(`
+        try { Nothing }
+    `)).toEqual(
+        { type: NodeType.Module, block: [
+            { type: NodeType.TryExpression,
+                block: [ { type: NodeType.Nothing } ],
+            }
+        ] }
+    );
+    expect(parse(`
+        try { Nothing } else { x }
+    `)).toEqual(
+        { type: NodeType.Module, block: [
+            { type: NodeType.TryExpression,
+                block: [ { type: NodeType.Nothing } ],
+                else_block: [ { type: NodeType.Identifier, value: "x" } ],
+            }
+        ] }
+    );
+    expect(parse(`
         try {} catch {}
     `)).toEqual(
         { type: NodeType.Module, block: [
@@ -557,10 +595,12 @@ test("Parser.BinaryExpression", function() {
         Nothing or Nothing
     `)).toEqual(
         { type: NodeType.Module, block: [
-            { type: NodeType.BinaryOperator, 
-                operator: Operator.Or,
-                left_operand: { type: NodeType.Nothing },
-                right_operand: { type: NodeType.Nothing },
+            { type: NodeType.Builtin,
+                builtin: Builtin.Or,
+                arguments: [
+                    { type: NodeType.Nothing },
+                    { type: NodeType.Nothing },
+                ],
             },
         ] }
     );
@@ -568,14 +608,18 @@ test("Parser.BinaryExpression", function() {
         1 or 2 or 3
     `)).toEqual(
         { type: NodeType.Module, block: [
-            { type: NodeType.BinaryOperator, 
-                operator: Operator.Or,
-                left_operand: { type: NodeType.Number, value: 1 },
-                right_operand: { type: NodeType.BinaryOperator,
-                    operator: Operator.Or,
-                    left_operand: { type: NodeType.Number, value: 2 },
-                    right_operand: { type: NodeType.Number, value: 3 },
-                },
+            { type: NodeType.Builtin,
+                builtin: Builtin.Or, 
+                arguments: [
+                    { type: NodeType.Number, value: 1 },
+                    { type: NodeType.Builtin,
+                        builtin: Builtin.Or,
+                        arguments: [
+                            { type: NodeType.Number, value: 2 },
+                            { type: NodeType.Number, value: 3 },
+                        ],
+                    },
+                ]
             },
         ] }
     );
@@ -583,14 +627,18 @@ test("Parser.BinaryExpression", function() {
         1 and 2 or 3
     `)).toEqual(
         { type: NodeType.Module, block: [
-            { type: NodeType.BinaryOperator, 
-                operator: Operator.Or,
-                left_operand: { type: NodeType.BinaryOperator,
-                    operator: Operator.And,
-                    left_operand: { type: NodeType.Number, value: 1 },
-                    right_operand: { type: NodeType.Number, value: 2 },
-                },
-                right_operand: { type: NodeType.Number, value: 3 },
+            { type: NodeType.Builtin, 
+                builtin: Builtin.Or,
+                arguments: [
+                    { type: NodeType.Builtin,
+                        builtin: Builtin.And,
+                        arguments: [
+                            { type: NodeType.Number, value: 1 },
+                            { type: NodeType.Number, value: 2 },
+                        ],
+                    },
+                    { type: NodeType.Number, value: 3 },
+                ],
             },
         ] }
     );
@@ -598,35 +646,48 @@ test("Parser.BinaryExpression", function() {
         (1 or 2) ^ 3 * 4 + 5 is not 6 and 7 or 8
     `)).toEqual(
         { type: NodeType.Module, block: [
-            { type: NodeType.BinaryOperator, 
-                operator: Operator.Or,
-                left_operand: { type: NodeType.BinaryOperator,
-                    operator: Operator.And,
-                    left_operand: { type: NodeType.BinaryOperator,
-                        operator: Operator.IsNot,
-                        left_operand: { type: NodeType.BinaryOperator,
-                            operator: Operator.Add,
-                            left_operand: { type: NodeType.BinaryOperator,
-                                operator: Operator.Multiply,
-                                left_operand: { type: NodeType.BinaryOperator,
-                                    operator: Operator.Exponentiate,
-                                    left_operand: { type: NodeType.BinaryOperator,
-                                        operator: Operator.Or,
-                                        left_operand: { type: NodeType.Number, value: 1 },
-                                        right_operand: { type: NodeType.Number, value: 2 },
+            { type: NodeType.Builtin, 
+                builtin: Builtin.Or,
+                arguments: [
+                    { type: NodeType.Builtin,
+                        builtin: Builtin.And,
+                        arguments: [
+                            { type: NodeType.Builtin,
+                                builtin: Builtin.Isnot,
+                                arguments: [
+                                    { type: NodeType.Builtin,
+                                        builtin: Builtin.Add,
+                                        arguments: [
+                                            { type: NodeType.Builtin,
+                                                builtin: Builtin.Mul,
+                                                arguments: [
+                                                    { type: NodeType.Builtin,
+                                                        builtin: Builtin.Pow,
+                                                        arguments: [
+                                                            { type: NodeType.Builtin,
+                                                                builtin: Builtin.Or,
+                                                                arguments: [
+                                                                    { type: NodeType.Number, value: 1 },
+                                                                    { type: NodeType.Number, value: 2 },
+                                                                ],
+                                                            },
+                                                            { type: NodeType.Number, value: 3 },
+                                                        ],
+                                                    },
+                                                    { type: NodeType.Number, value: 4 },
+                                                ],
+                                            },
+                                            { type: NodeType.Number, value: 5 },
+                                        ],
                                     },
-                                    right_operand: { type: NodeType.Number, value: 3 },
-                                },
-                                right_operand: { type: NodeType.Number, value: 4 },
+                                    { type: NodeType.Number, value: 6 },
+                                ],
                             },
-                            right_operand: { type: NodeType.Number, value: 5 },
-                        },
-                        right_operand: { type: NodeType.Number, value: 6 },
+                            { type: NodeType.Number, value: 7 },
+                        ],
                     },
-                    right_operand: { type: NodeType.Number, value: 7 },
-
-                },
-                right_operand: { type: NodeType.Number, value: 8 },
+                    { type: NodeType.Number, value: 8 },
+                ],
             },
         ] }
     );
@@ -637,9 +698,9 @@ test("Parser.UnaryExpression", function() {
         not Nothing
     `)).toEqual(
         { type: NodeType.Module, block: [
-            { type: NodeType.UnaryOperator,
-                operator: Operator.Not,
-                operand: { type: NodeType.Nothing },
+            { type: NodeType.Builtin,
+                builtin: Builtin.Not,
+                arguments: [ { type: NodeType.Nothing } ],
             }
         ] }
     );
@@ -647,13 +708,15 @@ test("Parser.UnaryExpression", function() {
         1 + +x
     `)).toEqual(
         { type: NodeType.Module, block: [
-            { type: NodeType.BinaryOperator,
-                operator: Operator.Add,
-                left_operand: { type: NodeType.Number, value: 1 },
-                right_operand: { type: NodeType.UnaryOperator,
-                    operator: Operator.Positive,
-                    operand: { type: NodeType.Identifier, value: "x" },
-                },
+            { type: NodeType.Builtin,
+                builtin: Builtin.Add,
+                arguments: [
+                    { type: NodeType.Number, value: 1 },
+                    { type: NodeType.Builtin,
+                        builtin: Builtin.Pos,
+                        arguments: [ { type: NodeType.Identifier, value: "x" } ],
+                    },
+                ],
             }
         ] }
     );
@@ -698,7 +761,7 @@ test("Parser.CallOrAccess", function() {
             { type: NodeType.Access,
                 value: { type: NodeType.Access,
                     value: { type: NodeType.Identifier, value: "f" },
-                    key: { type: NodeType.Symbol, value: ".x" },
+                    key: { type: NodeType.Symbol, value: Symbol.for("x") },
                 },
                 key: { type: NodeType.Identifier, value: "y" },
             }
@@ -713,11 +776,11 @@ test("Parser.CallOrAccess", function() {
                     value: { type: NodeType.Call,
                         value: { type: NodeType.Access,
                             value: { type: NodeType.Identifier, value: "f" },
-                            key: { type: NodeType.Symbol, value: ".x" },
+                            key: { type: NodeType.Symbol, value: Symbol.for("x") },
                         },
                         arguments: [],
                     },
-                    key: { type: NodeType.Symbol, value: ".y" },
+                    key: { type: NodeType.Symbol, value: Symbol.for("y") },
                 },
                 arguments: []
             }
@@ -820,9 +883,8 @@ test("Parser.ListLiteral", function() {
         { type: NodeType.Module, block: [
             { type: NodeType.ListExpression, items: [
                 { type: NodeType.Nothing },
-                { type: NodeType.UnaryOperator,
-                    operator: Operator.Spread,
-                    operand: { type: NodeType.Identifier, value: "x" },
+                { type: NodeType.Spread,
+                    value: { type: NodeType.Identifier, value: "x" },
                 },
             ] }
         ] }
@@ -843,11 +905,11 @@ test("Parser.MapLiteral", function() {
         { type: NodeType.Module, block: [
             { type: NodeType.MapExpression, pairs: [
                 { type: NodeType.Pair,
-                    key: { type: NodeType.Symbol, value: ".x" },
+                    key: { type: NodeType.Symbol, value: Symbol.for("x") },
                     value: { type: NodeType.Nothing },
                 },
-                { type: NodeType.Pair,
-                    spread: { type: NodeType.Identifier, value: "x" },
+                { type: NodeType.Spread,
+                    value: { type: NodeType.Identifier, value: "x" },
                 },
             ] }
         ] }
@@ -862,5 +924,36 @@ test("Parser.MapLiteral", function() {
                 }
             ] }
         ] }
+    );
+});
+
+test("Parser.ReferenceLiteral", function() {
+    expect(parse(`
+        Box [ x ]
+    `)).toEqual(
+        { type: NodeType.Module, block: [
+            { type: NodeType.BoxExpression,
+                value: { type: NodeType.Identifier, value: "x" },
+            }
+        ] },
+    );
+    expect(parse(`
+        Box [ 
+            x
+            or
+            y 
+        ]
+    `)).toEqual(
+        { type: NodeType.Module, block: [
+            { type: NodeType.BoxExpression,
+                value: { type: NodeType.Builtin,
+                    builtin: Builtin.Or,
+                    arguments: [
+                        { type: NodeType.Identifier, value: "x" },
+                        { type: NodeType.Identifier, value: "y" },
+                    ]
+                },
+            }
+        ] },
     );
 });

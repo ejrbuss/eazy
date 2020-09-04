@@ -1,4 +1,3 @@
-import Parsing from "./Parsing";
 const { 
     Stream, 
     literal, 
@@ -26,7 +25,9 @@ const {
     map_error,
     filter,
     at_least_n,
-} = Parsing;
+    map_ctx,
+    map_ctx_to,
+} = require("./Parsing");
 
 test("Parsing.literal", function() {
     expect(literal("abc")(Stream("abcdef"))).toBe("abc");
@@ -233,4 +234,50 @@ test("Parsing.at_lest_n", function() {
     expect(parser(Stream("a"))).toBe(true);
     expect(parser(Stream(""))).toBe(false);
     expect(parser(Stream("da"))).toBe(false);
+});
+
+test("Parsing.map_ctx", function() {
+    const sub_parser = lazy(function() {
+        return sequence(
+            function(stream, ctx) {
+                return literal(ctx.toString())(stream, ctx);
+            },
+            maybe(map_ctx(function(ctx) {
+                return ctx + 1;
+            }, sub_parser)),
+        );
+    });
+    const parser = map_to(true, all(sub_parser));
+
+    expect(parser(Stream("0"), 0)).toBe(true);
+    expect(parser(Stream("01"), 0)).toBe(true);
+    expect(parser(Stream("456789"), 4)).toBe(true);
+    expect(parser(Stream("1"), 0)).toBe(false);
+    expect(parser(Stream("01235"), 0)).toBe(false);
+    expect(parser(Stream("456789"), 5)).toBe(false);
+    expect(parser(Stream("c"), 0)).toBe(false);
+});
+
+test("Parsing.map_ctx_to", function() {
+    const parse_ctx = function(stream, ctx) {
+        return literal(ctx)(stream, ctx);
+    };
+    const parser = map_to(true, all(many(
+        choice(
+            sequence(
+                literal("a"), map_ctx_to("a", parse_ctx),
+            ),
+            sequence(
+                literal("b"), map_ctx_to("b", parse_ctx),
+            ),
+        )
+    )));
+
+    expect(parser(Stream("aa"))).toBe(true);
+    expect(parser(Stream("bb"))).toBe(true);
+    expect(parser(Stream("aabb"))).toBe(true);
+    expect(parser(Stream("bbaaaabbbbbb"))).toBe(true);
+    expect(parser(Stream("aab"))).toBe(false);
+    expect(parser(Stream("abab"))).toBe(false);
+    expect(parser(Stream("c"))).toBe(false);
 });

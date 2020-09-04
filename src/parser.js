@@ -1,8 +1,4 @@
-import { 
-    NodeType,
-    Operator,
-} from "./Constants.js";
-import Parsing from "./Parsing.js";
+const { NodeType, Builtin, TokenType } = require("./Node");
 const {
     Stream,
     Parser, 
@@ -22,13 +18,15 @@ const {
     map_to_nth,
     map_into,
     named_sequence,
-} = Parsing;
+    map_ctx_to,
+} = require("./Parsing");
+const { ErrorType } = require("./ErrorHandling");
 
 function token_of_type(type) {
-    return Parser(function(stream) {
+    return Parser(function(stream, ctx) {
         let next_token = next(stream);
-        if (type !== NodeType.ImplicitTerminator) {
-            while (next_token.type === NodeType.ImplicitTerminator) {
+        if (ctx.skip_implicit_terminators) {
+            while (next_token.type == TokenType.ImplicitTerminator) {
                 next_token = next(stream);
             }
         }
@@ -40,10 +38,12 @@ function token_of_type(type) {
 }
 
 function token_with_value(value) {
-    return Parser(function(stream) {
+    return Parser(function(stream, ctx) {
         let next_token = next(stream);
-        while (next_token.type === NodeType.ImplicitTerminator) {
-            next_token = next(stream);
+        if (ctx.skip_implicit_terminators) {
+            while (next_token.type == TokenType.ImplicitTerminator) {
+                next_token = next(stream);
+            }
         }
         if (next_token.value === value) {
             return next_token;
@@ -52,16 +52,34 @@ function token_with_value(value) {
     });
 }
 
-function map_binary_operator(parser) {
+function map_ctx_skip_implicit_terminators(paresr) {
+    return map_ctx_to({ skip_implicit_terminators: true }, parser);
+}
+
+function map_ctx_reset(parser) {
+    return map_ctx_to({}, parser);
+}
+
+function map_binary_builtin(parser) {
+    return map(function(result) {
+        const [ left_operand, builtin, right_operand ] = result;
+        return {
+            type: NodeType.Builtin,
+            builtin,
+            arguments: [ left_operand, right_operand ],
+        }
+    }, parser);
+}
+
+function map_recursive_binary_builtin(parser) {
     return map(function(result) {
         const [ blocks, operators ] = result;
         result = blocks.pop();
         while (blocks.length > 0) {
             result = { 
-                type: NodeType.BinaryOperator, 
-                operator: operators.pop(),
-                left_operand: blocks.pop(),
-                right_operand: result,
+                type: NodeType.Builtin, 
+                builtin: operators.pop(),
+                arguments: [ blocks.pop(), result ],
             };
         }
         return result;
@@ -82,6 +100,24 @@ const simple_literal = choice(
     token_of_type(NodeType.Nothing),
 );
 
+const box_literal = lazy(function() {
+    return map_into({ type: NodeType.BoxExpression }, named_sequence(
+        token_with_value("Box"),
+        token_with_value("["),
+        "value", must(expression),
+        must(token_with_value("]")),
+    ));
+});
+
+const spread_item = lazy(function() {
+    return map_into({ type: NodeType.Spread },
+        named_sequence(
+            token_with_value("..."),
+            "value", must(operator_free_expression),
+        )
+    );
+});
+
 const pair = lazy(function() {
     return map_into({ type: NodeType.Pair }, 
         choice(
@@ -91,43 +127,42 @@ const pair = lazy(function() {
                 "value", must(expression),
             ),
             named_sequence(
-                token_with_value("..."),
-                "spread", must(operator_free_expression),
-            ),
-            named_sequence(
                 "value", token_of_type(NodeType.Identifier)
             ),
         ),
     );
 });
 
-const pairs = map_to_nth(0, 
-    alternate(
-        pair, 
-        token_with_value(","),
-    ),
+const map_item = choice(
+    spread_item,
+    pair,
 );
+
+const map_items = map_to_nth(0, alternate(map_item, token_with_value(",")));
 
 const map_literal = map_into({ type: NodeType.MapExpression }, 
     named_sequence(
         token_with_value("Map"),
         token_with_value("["),
-        "pairs", must(pairs),
+        "pairs", must(map_items),
         must(token_with_value("]")),
     ),
 );
 
-const expressions = lazy(function() {
-    return map_to_nth(0,
-        alternate(expression, token_with_value(",")),
+const list_item = lazy(function() {
+    return choice(
+        spread_item,
+        expression,
     );
 });
+
+const list_items = map_to_nth(0, alternate(list_item, token_with_value(",")));
 
 const list_literal = map_into({ type: NodeType.ListExpression }, 
     named_sequence(
         token_with_value("List"),
         token_with_value("["),
-        "items", must(expressions),
+        "items", must(list_items),
         must(token_with_value("]")),
     ),
 );
@@ -136,6 +171,7 @@ const function_ = lazy(function() {
     return map_into({ type: NodeType.Function }, 
         named_sequence(
             token_with_value("Function"),
+            many(terminator),
             "cases", choice(cases, case_block),
         ),
     );
@@ -153,6 +189,7 @@ const simple_expression = lazy(function() {
         function_,
         list_literal,
         map_literal,
+        box_literal,
         simple_literal,
     );
 });
@@ -169,6 +206,12 @@ const access = lazy(function() {
                 token_with_value("]"),
             ),
         ),
+    );
+});
+
+const expressions = lazy(function() {
+    return map_to_nth(0,
+        alternate(expression, token_with_value(",")),
     );
 });
 
@@ -200,28 +243,27 @@ const operator_free_expression = map(function(result) {
 ));
 
 const unary_operator = choice(
-    map_to(Operator.Not, token_with_value("not")),
-    map_to(Operator.Positive, token_with_value("+")),
-    map_to(Operator.Negative, token_with_value("-")),
-    map_to(Operator.Spread, token_with_value("...")),
+    map_to(Builtin.Not, token_with_value("not")),
+    map_to(Builtin.Pos, token_with_value("+")),
+    map_to(Builtin.Neg, token_with_value("-")),
 );
 
 const unary_expression = choice(
-    map_into({ type: NodeType.UnaryOperator },
+    map_into({ type: NodeType.Builtin },
         named_sequence(
-            "operator", unary_operator,
-            "operand",  must(operator_free_expression),
+            "builtin", unary_operator,
+            "arguments",  map_into([], must(operator_free_expression)),
         ),
     ),
     operator_free_expression,
 );
 
 const exponential_operator = choice(
-    map_to(Operator.Exponentiate, token_with_value("^")),
-    map_to(Operator.Range, token_with_value("..")),
+    map_to(Builtin.Pow, token_with_value("^")),
+    map_to(Builtin.Range, token_with_value("..")),
 );
 
-const exponential_expression = map_binary_operator(
+const exponential_expression = map_recursive_binary_builtin(
     separate1(
         unary_expression,
         exponential_operator,
@@ -229,11 +271,11 @@ const exponential_expression = map_binary_operator(
 );
 
 const multiplicative_operator = choice(
-    map_to(Operator.Multiply, token_with_value("*")),
-    map_to(Operator.Divide, token_with_value("/")),
+    map_to(Builtin.Mul, token_with_value("*")),
+    map_to(Builtin.Div, token_with_value("/")),
 );
 
-const multiplicative_expression = map_binary_operator(
+const multiplicative_expression = map_recursive_binary_builtin(
     separate1(
         exponential_expression, 
         multiplicative_operator,
@@ -241,11 +283,11 @@ const multiplicative_expression = map_binary_operator(
 );
 
 const additive_operator = choice(
-    map_to(Operator.Add, token_with_value("+")),
-    map_to(Operator.Subtract, token_with_value("-")),
+    map_to(Builtin.Add, token_with_value("+")),
+    map_to(Builtin.Sub, token_with_value("-")),
 );
 
-const additive_expression = map_binary_operator(
+const additive_expression = map_recursive_binary_builtin(
     separate1(
         multiplicative_expression, 
         additive_operator,
@@ -253,46 +295,48 @@ const additive_expression = map_binary_operator(
 );
 
 const relational_operator = choice(
-    map_to(Operator.NotEqual, token_with_value("/=")),
-    map_to(Operator.Equal, token_with_value("==")),
-    map_to(Operator.IsNot, sequence(token_with_value("is"), token_with_value("not"))),
-    map_to(Operator.Is, token_with_value("is")),
-    map_to(Operator.LessThanOrEqualTo, token_with_value("<=")),
-    map_to(Operator.LessThan, token_with_value("<")),
-    map_to(Operator.GreaterThanOrEqualTo, token_with_value(">=")),
-    map_to(Operator.GreaterThan, token_with_value(">")),
-    map_to(Operator.NotIn, sequence(token_with_value("not"), token_with_value("in"))),
-    map_to(Operator.In, token_with_value("in")),
+    map_to(Builtin.Noteq, token_with_value("/=")),
+    map_to(Builtin.Eq, token_with_value("==")),
+    map_to(Builtin.Isnot, sequence(token_with_value("is"), token_with_value("not"))),
+    map_to(Builtin.Is, token_with_value("is")),
+    map_to(Builtin.Lte, token_with_value("<=")),
+    map_to(Builtin.Lt, token_with_value("<")),
+    map_to(Builtin.Gte, token_with_value(">=")),
+    map_to(Builtin.Gt, token_with_value(">")),
+    map_to(Builtin.Notin, sequence(token_with_value("not"), token_with_value("in"))),
+    map_to(Builtin.In, token_with_value("in")),
 );
 
-const relational_expression = map_binary_operator(
+const relational_expression = map_recursive_binary_builtin(
     separate1(
         additive_expression,
         relational_operator,
     ),
 );
 
-const and_expression = map_binary_operator(
+const and_expression = map_recursive_binary_builtin(
     separate1(
         relational_expression,
-        map_to(Operator.And, token_with_value("and")),
+        map_to(Builtin.And, token_with_value("and")),
     ),
 );
 
-const or_expression = map_binary_operator(
+const or_expression = map_recursive_binary_builtin(
     separate1(
         and_expression,
-        map_to(Operator.Or, token_with_value("or")),
+        map_to(Builtin.Or, token_with_value("or")),
     ),
 );
 
 const primary_expression = or_expression;
 
 const block = lazy(function() {
-    return map_to_nth(1,
+    return map_to_nth(2,
         sequence(
             token_with_value("{"),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             statements,
+            many(token_of_type(NodeType.ImplicitTerminator)),
             token_with_value("}"),
         ),
     );
@@ -303,61 +347,76 @@ const case_block = lazy(function() {
         choice(
             named_sequence(
                 token_with_value("{"),
+                many(token_of_type(NodeType.ImplicitTerminator)),
                 "patterns", patterns,
-                "condition", maybe(map_to_nth(1,
+                many(token_of_type(NodeType.ImplicitTerminator)),
+                "condition", maybe(map_to_nth(2,
                     sequence(
                         token_with_value("if"),
+                        many(token_of_type(NodeType.ImplicitTerminator)),
                         must(primary_expression),
                     ),
                 )),
+                many(token_of_type(NodeType.ImplicitTerminator)),
                 token_with_value("->"),
+                many(token_of_type(NodeType.ImplicitTerminator)),
                 "block", must(statements),
+                many(token_of_type(NodeType.ImplicitTerminator)),
                 must(token_with_value("}")),
             ),
             named_sequence(
                 "patterns", map_to([], pass),
-                token_with_value("{"),
-                "block", must(statements),
-                token_with_value("}"),
+                many(token_of_type(NodeType.ImplicitTerminator)),
+                "block", block
             ),
         ),
     ));
 });
 
+const try_else = lazy(function() {
+    return map_to_nth(2,
+        sequence(
+            token_with_value("else"),
+            many(token_of_type(NodeType.ImplicitTerminator)),
+            must(block),
+        )  
+    );
+});
+
 const finally_ = lazy(function() {
-    return map_to_nth(1,
+    return map_to_nth(2,
         sequence(
             token_with_value("finally"),
-            block,
+            many(token_of_type(NodeType.ImplicitTerminator)),
+            must(block),
         ),
     );
 });
 
 const catch_ = lazy(function() {
-    return map_to_nth(1, 
+    return map_to_nth(2, 
         sequence(
             token_with_value("catch"),
-            choice(
+            many(token_of_type(NodeType.ImplicitTerminator)),
+            must(choice(
                 cases,
                 case_block,
-            )
+            ))
         ),
     );
 });
 
 const try_expression = map_into({ type: NodeType.TryExpression },
-    choice(
-        named_sequence(
-            token_with_value("try"),
-            "block", block,
-            "catch_cases", catch_,
-            "finally_block", maybe(finally_),
-        ),
-        named_sequence(
-            token_with_value("try"),
-            "block", block,
-            "finally_block", finally_,
-        ),
+    named_sequence(
+        token_with_value("try"),
+        many(token_of_type(NodeType.ImplicitTerminator)),
+        "block", block,
+        many(token_of_type(NodeType.ImplicitTerminator)),
+        "else_block", maybe(try_else),
+        many(token_of_type(NodeType.ImplicitTerminator)),
+        "catch_cases", maybe(catch_),
+        many(token_of_type(NodeType.ImplicitTerminator)),
+        "finally_block", maybe(finally_),
     ),
 );
 
@@ -365,22 +424,31 @@ const for_expression = lazy(function() {
     return map_into({ type: NodeType.ForExpression }, 
         named_sequence(
             token_with_value("for"),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             "pattern", must(pattern),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             must(token_with_value("in")),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             "expression", must(primary_expression),
-            "if_condition", maybe(map_to_nth(1,
+            many(token_of_type(NodeType.ImplicitTerminator)),
+            "if_condition", maybe(map_to_nth(2,
                 sequence(
                     token_with_value("if"),
+                    many(token_of_type(NodeType.ImplicitTerminator)),
                     must(primary_expression),
                 ),
             )),
-            "while_condition", maybe(map_to_nth(1,
+            many(token_of_type(NodeType.ImplicitTerminator)),
+            "while_condition", maybe(map_to_nth(2,
                 sequence(
                     token_with_value("while"),
+                    many(token_of_type(NodeType.ImplicitTerminator)),
                     must(primary_expression),
                 ),
             )),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             must(token_with_value("do")),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             "block", must(block),
         ),
     );
@@ -390,7 +458,9 @@ const else_case = lazy(function() {
     return map_into({ type: NodeType.ElseCase },
         named_sequence(
             token_with_value("else"),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             must(token_with_value("=>")),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             "block", sequence(must(statement)),
         ),
     );
@@ -400,13 +470,17 @@ const primary_case = lazy(function() {
     return map_into({ type: NodeType.Case },
         named_sequence(
             "patterns", patterns,
-            "condition", maybe(map_to_nth(1,
+            many(token_of_type(NodeType.ImplicitTerminator)),
+            "condition", maybe(map_to_nth(2,
                 sequence(
                     token_with_value("if"),
+                    many(token_of_type(NodeType.ImplicitTerminator)),
                     must(expression),
             ))),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             token_with_value("=>"),
-           "block", must(sequence(statement)),
+            many(token_of_type(NodeType.ImplicitTerminator)),
+            "block", must(sequence(statement)),
         ),
     );
 });
@@ -421,10 +495,15 @@ const cases = map_to_nth(1,
         token_with_value("{"),
         map_to_nth(0,
             alternate(
-                case_, 
+                map_to_nth(1, sequence(
+                    many(token_of_type(NodeType.ImplicitTerminator)),
+                    case_,
+                    many(token_of_type(NodeType.ImplicitTerminator)),
+                    )),
                 token_with_value(","),
             ),
         ),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         token_with_value("}"),
     ),
 );
@@ -433,12 +512,16 @@ const match_expression = map_into({ type: NodeType.MatchExpression },
     choice(
         named_sequence(
             token_with_value("match"),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             "cases", cases,
         ),
         named_sequence(
             token_with_value("match"),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             "expression", must(primary_expression),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             must(token_with_value("with")),
+            many(token_of_type(NodeType.ImplicitTerminator)),
             "cases", must(cases),
         )
     ),
@@ -447,8 +530,11 @@ const match_expression = map_into({ type: NodeType.MatchExpression },
 const while_expression = map_into({ type: NodeType.WhileExpression },
     named_sequence(
         token_with_value("while"),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         "condition", must(primary_expression), 
+        many(token_of_type(NodeType.ImplicitTerminator)),
         must(token_with_value("do")),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         "block", must(block),
     ),
 );
@@ -456,6 +542,7 @@ const while_expression = map_into({ type: NodeType.WhileExpression },
 const do_expression = map_into({ type: NodeType.DoExpression }, 
     named_sequence(
         token_with_value("do"),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         "block", must(block),
     ),
 );
@@ -470,9 +557,13 @@ const if_continuation = lazy(function() {
 const if_expression = map_into({ type: NodeType.IfExpression }, 
     named_sequence(
         token_with_value("if"),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         "condition", must(primary_expression),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         must(token_with_value("then")),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         "then_block", must(block),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         "else_block", maybe(map_to_nth(1,
             sequence(
                 token_with_value("else"),
@@ -553,9 +644,20 @@ const map_binding = map_into({ type: NodeType.MapExpression },
 const patterns = lazy(function() {
     return map_to_nth(0, 
         alternate(
-            pattern, 
+            pattern,
             token_with_value(","),
         ),
+    );
+});
+
+const box_binding = lazy(function() {
+    return map_into({ type: NodeType.BoxExpression },
+        named_sequence(
+            token_with_value("Box"),
+            must(token_with_value("[")),
+            "value", must(pattern),
+            must(token_with_value("]")),
+        )
     );
 });
 
@@ -568,26 +670,25 @@ const list_binding = map_into({ type: NodeType.ListExpression },
     ),
 );
 
-const spread_binding = map_into({ type: NodeType.UnaryOperator },
+const spread_binding = map_into({ type: NodeType.Spread },
     named_sequence(
-        "operator", map_to(Operator.Spread, token_with_value("...")),
-        "operand", maybe(token_of_type(NodeType.Identifier)), 
-    ),
+        token_with_value("..."),
+        "value", maybe(token_of_type(NodeType.Identifier), 
+    )),
 );
 
-const range_binding = map_into({ type: NodeType.BinaryOperator }, 
-    named_sequence(
-        "left_operand", token_of_type(NodeType.Number),
-        "operator", map_to(Operator.Range, token_with_value("..")),
-        "right_operand", must(token_of_type(NodeType.Number)),
-    ),
-);
+const range_binding = map_binary_builtin(sequence(
+    token_of_type(NodeType.Number),
+    map_to(Builtin.Range, token_with_value("..")),
+    must(token_of_type(NodeType.Number)),
+));
 
 const binding = choice(
     range_binding,
     spread_binding,
     list_binding,
     map_binding,
+    box_binding,
     simple_literal,
 );
 
@@ -595,8 +696,14 @@ const pattern = map_into({ type: NodeType.Pattern },
     named_sequence(
         "bindings", map_to_nth(0, 
             separate1(
-                binding,
-                token_with_value("as"), 
+                map_to_nth(1, sequence(
+                    many(token_of_type(NodeType.ImplicitTerminator)),
+                    binding,
+                )),
+                sequence(
+                    many(token_of_type(NodeType.ImplicitTerminator)),
+                    token_with_value("as"), 
+                ),
             ),
         ),
     ),
@@ -605,6 +712,7 @@ const pattern = map_into({ type: NodeType.Pattern },
 const declaration = map_into({ type: NodeType.Declaration }, 
     named_sequence(
         "doc", maybe(token_of_type(NodeType.Doc)),
+        many(token_of_type(NodeType.ImplicitTerminator)),
         token_with_value("let"),
         "pattern", must(pattern),
         must(token_with_value("=")),
@@ -620,29 +728,90 @@ const statement = choice(
     expression,
 );
 
-const statements = map_to_nth(0, 
-    alternate(statement, terminator)
-);
+const statements = map_to_nth(1, sequence(
+    many(terminator),
+    map_to_nth(0, alternate(statement, terminator)),
+));
 
 const module_ = must(all(map_into({ type: NodeType.Module }, 
     named_sequence(
+        many(terminator),
         "block", statements,
+        many(terminator),
     ),
 )));
 
-function parse(tokens) {
-    tokens = tokens.filter(function(token) {
-        if (token.type === NodeType.Whitespace) {
-            return false;
+function filter_tokens(tokens) {
+    const filtered_tokens = [];
+    const skip_token_types = [ NodeType.Whitespace, NodeType.Comment ];
+
+    for (const token of tokens) {
+        if (!skip_token_types.includes(token.type)) {
+            filtered_tokens.push(token);
         }
-        if (token.type === NodeType.Comment) {
-            return false;
-        }
-        return true;
-    });
-    return module_(Stream(tokens));
+    }
+    return filtered_tokens;
 }
 
-export default { 
+function check_seperators(tokens) {
+    const seperators = {
+        openers: [ "(", "[", "{" ],
+        closers: [ ")", "]", "}" ],
+    };
+    const matching_pair = {
+        "(": ")",
+        ")": "(",
+        "[": "]",
+        "]": "[",
+        "{": "}",
+        "}": "{",
+    };
+    const filtered_tokens = [];
+    const seperator_stack = [];
+
+    for (const token of tokens) {
+        if (seperators.openers.includes(token.value)) {
+            seperator_stack.push(token);
+            filtered_tokens.push(token);
+            continue;
+        }
+        if (seperators.closers.includes(token.value)) {
+            if (seperator_stack.length === 0) {
+                throw new Error({
+                    type: ErrorType.UnmatchedSeperators,
+                    closing: token,
+                });
+            }
+            const opening = seperator_stack.pop();
+            if (matching_pair[opening.value] !== token.value) {
+                throw new Error({
+                    type: ErrorType.UnmatchedSeperators,
+                    opening,
+                    closing: token,
+                });
+            }
+            filtered_tokens.push(token);
+            continue;
+        }
+        if (token.type === TokenType.ImplicitTerminator) {
+            // Only keep implicit terminators whose immediate context is a block
+            // this lets us forget about implicit termiantors in a lot of different situations
+            if (seperator_stack.length === 0 || seperator_stack[seperator_stack.length - 1].value === "{") {
+                filtered_tokens.push(token);
+            }
+            continue;
+        }
+        filtered_tokens.push(token);
+    }
+    return filtered_tokens;
+}
+
+function parse(tokens) {
+    tokens = filter_tokens(tokens);
+    tokens = check_seperators(tokens);
+    return module_(Stream(tokens), {});
+}
+
+module.exports = { 
     parse,
 };

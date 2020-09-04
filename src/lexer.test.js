@@ -1,6 +1,6 @@
-import Lexer from "./Lexer.js";
-import { Stream } from "./Parsing.js";
-import { TokenType } from "./Constants.js";
+const Lexer = require("./Lexer");
+const { Stream } = require("./Parsing");
+const { TokenType } = require("./Node");
 
 function lex(source) {
     return discard_position(Lexer.lex(Stream(source)));
@@ -105,7 +105,7 @@ test("Lexer.String", function() {
 
 test("Lexer.Symbol", function() {
     expect(lex(".symbol_name?")).toEqual([
-        { type: TokenType.Symbol, value: ".symbol_name?" },
+        { type: TokenType.Symbol, value: Symbol.for("symbol_name?") },
     ]);
 });
 
@@ -200,12 +200,12 @@ test("Lexer.general", function () {
         { type: 'Punctuation', value: '{' },
         { type: 'ImplicitTerminator', value: '\n            ' },
         { type: 'Identifier', value: 'IO' },
-        { type: 'Symbol', value: '.print' },
+        { type: 'Symbol', value: Symbol.for('print') },
         { type: 'Punctuation', value: '(' },
-        { type: 'Symbol', value: '.cube' },
+        { type: 'Symbol', value: Symbol.for('cube') },
         { type: 'Punctuation', value: ',' },
         { type: 'Whitespace', value: ' ' },
-        { type: 'Symbol', value: '.i' },
+        { type: 'Symbol', value: Symbol.for('i') },
         { type: 'Punctuation', value: ',' },
         { type: 'Whitespace', value: ' ' },
         { type: 'Identifier', value: 'cube' },

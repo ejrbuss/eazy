@@ -1,4 +1,11 @@
-import EZIR from "./EZIR.js"js";
+const EZIR = require("./EZIR");
+
+const Status = {
+    Running: 0,
+    Waiting: 1,
+    Halted: 2,
+    Errored: 3,
+};
 
 /*
 vm_interface is still kind of undefined
@@ -10,10 +17,10 @@ vm_interface is still kind of undefined
 
 */
 
-function init_vm(interace) {
+function init_vm(iface) {
     return {
         // External interface
-        interface,
+        iface,
 
         // Registers
         isp: 0,
@@ -22,28 +29,25 @@ function init_vm(interace) {
 
         // Data
         code: [],
-        vars: [],
+        // Deafult args and captures
+        vars: [ [], [] ],
     };
 }
 
-async function eval_source(source, vm) {
+function eval_source(source, vm) {
     // TODO lex -> parse -> analyse -> codegen -> eval
 }
 
 
-async function eval_ir(ir, vm) {
+function eval_ir(ir, vm) {
 
-    let {
+    // Localize registers
+    let isp = vm.isp;
+    let vsp = vm.vsp;
+    let str = vm.str;
 
-        // Registers
-        isp,
-        vsp,
-
-        // Data
-        code,
-        vars,
-
-    } = vm;
+    let code = vm.code;
+    let vars = vm.vars;
 
     // Append ir
     isp = code.length;
@@ -56,18 +60,33 @@ async function eval_ir(ir, vm) {
         },
 
         [EZIR.CONST]: function(constant, v_dst) {
-            vars[vsp + v_dst] = Constant;
+            vars[vsp + v_dst] = constant;
         },
 
-        [EZIR.EXPAND]: function(locals) {
+        [EZIR.CLAIM]: function(locals) {
             vars.length += locals;
+        },
+
+        [EZIR.HALT]: function() {
+            str = Status.Halted;
         },
 
     };
 
+    while (str === Status.Running) {
+        const [ opcode, ...args ] = code[isp++];
+        OpcodeHandlers[opcode](...args);
+    }
+
+    // Save registers
+    vm.isp = isp;
+    vm.vsp = vsp;
+    vm.str = str;
+
+    return;
 }
 
-export default {
+module.exports = {
     init_vm,
     eval_source,
     eval_ir,

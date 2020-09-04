@@ -1,5 +1,5 @@
-import Language from "./language.js";
-import { scope_analysis } from "./ScopeAnalysis.js";
+const Language = require("./language");
+const { scope_analysis } = require("./ScopeAnalysis");
 
 function remove_declaring_nodes(scopes) {
     function remove_declaring_nodes(scope) {

@@ -1,17 +1,13 @@
-import { 
-    TokenType, 
-    Keywords, 
-    Operators,
-} from "./Constants.js";
-import Parsing from "./Parsing.js";
-const { 
+const { Keywords, Operators } = require("./Constants");
+const { TokenType } = require("./Node");
+const {
     regex, 
     all,
     choice,
     many,
     map,
     must,
-} = Parsing;
+} = require("./Parsing");
 
 function map_type(type, parser) {
     return map(function(match, position, stream) {
@@ -84,10 +80,10 @@ const string = choice(
     }, regex(/^'((\\'|[^'])*)'/)),
 );
 
-const symbol = map_type(
-    TokenType.Symbol,
-    regex(/^\.\w+\??/),
-);
+const symbol =  map(function (match, position, stream) {
+    const length = stream.position - position;
+    return { type: TokenType.Symbol, position, length, value: Symbol.for(match[1]) };
+}, regex(/^\.(\w+\??)/));
 
 const identifier = map(function(match, position, stream) {
     const length = stream.position - position;
@@ -137,6 +133,6 @@ const token = choice(
 
 const lex = must(all(many(token)));
 
-export default {
+module.exports = {
     lex,
 };

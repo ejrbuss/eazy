@@ -1115,3 +1115,192 @@ match ezir[isp] with {
     ...
 }
 ```
+
+Hot reloading as a library
+
+```
+let HotReload = import("core/HotReload")
+ -- HotReload.watch_file(path, on_change)
+```
+
+```
+try { x.y.z } catch { else => False }
+try { x.y.z } else { False }
+default(try { x.y.z }, False)
+
+let default = Function { 
+   Nothing, default_value => 
+      default_value,
+   value, _, =>
+      value
+}
+
+if Nothing?(x) then { default_value } else { x }
+
+default_if(Nothing?, x, default_value)
+
+sh.mkdir("~/site", List [ .p ])
+sh.cd("~/site")
+for domain in List [
+   "site.com",
+   "site.co.uk",
+   "site.fr,
+   "site.ca",
+   "site.de",
+] do {
+   sh.git.clone(String.template("{git_url}/{domain}.git", Map [
+      git_url,
+      domain,
+   ])
+}
+```
+
+# Analysis phase 1
+ - Assign variables to all identifiers 
+   - allows for the eliminatino of do expressions
+
+# Desugaring
+ - Standardize if expressions
+ - Simplifiy assignments
+ - Convert multi case funcions into single case + match
+ - Convert multi case catch into single case + match
+ - Split pattern conditions
+ - Convert destructuring into assignments
+ - Convert pattern matching into if expressions
+ - Convert for loops into while loops
+ - Hoist declarations
+ - Flatten blocks
+
+# IR
+ - Convert to Basic Block CFG IR
+ - .future Convert to SSA Form
+
+# Optimization
+ - .future Dead code analysis
+ - .future Escape analysis
+ - .future Type checking
+ - .future Subexpression elimination
+ - .future Peekhole etc.
+
+# Bytecode
+ - Convert from IR to bytecode
+
+```
+-- Rough Pipeline
+Source
+   -> lexer
+   -> parser
+   -> analysis
+      -> scope analysis
+      -> spread analysis (spread operator is only allowed in certain cases)
+      -> match analysis (else needs to be last case)
+   -> desugar
+      -> desugar if branch
+      -> desugar List expressions
+      -> desugar Map expressions
+      -> desugar declarations
+      -> desguar do expressions
+      -> desugar multi case functions
+      -> desugar multi case catch
+      -> desugar patterns
+         -> desguar split patterns
+         -> desugar pattern matching
+         -> desugar destructuring
+         -> desugar match
+      -> for loops into while loops
+      -> inline all "builtin" function calls
+      -> replace all assignment to captured variables with references
+   -> ir generation
+   -> optimization
+   -> byte code generation
+```
+
+# Concurreny Model
+
+Nothing
+Boolean (True and False)
+Number
+String
+Symbol
+List
+Map
+Function
+--
+Reference (blackbox)
+
+## Names
+Future
+Incomplete
+Eventual
+
+## Nixed
+ x Deferred
+ x Delayed
+ x Unfinished
+ x Promise
+ x Task
+ x Job
+ x Later
+ x Asynchronous
+
+```
+
+let x = input() --> FutureValue
+await x --> PresentValue
+
+-- Get a concurrent value
+let my_func = Function {
+    let user_input = await input()
+    return user_input
+}
+
+await my_func() --> they would get back a concurrent value
+
+-- Catch a concurrent error
+try {
+    let user_input = await input()
+} catch { err ->
+   ...
+}
+
+-- Create a concurrent value?
+
+Function make_input_uppercase {
+    x = FutureValue {
+        return String.to_uppercase(await input() --- "hello" ---) --- "HELLO" ---
+    } --- FutureValue ---
+    -- proceed without waiting for x
+    -- await x --- "HELLO" ---
+    return x
+}
+
+Function make_input_uppercase {
+    return String.to_uppercase(await input())
+}
+
+let input_function = make_input_uppercase
+let user_input = await input_function
+
+```
+
+```
+input().then(function(user_input) {
+    ...does stuff with user input
+})
+// this code here doesn't have user_input
+```
+
+# Intrinsics
+
+Reserve `__`
+
+```
+__intrinsic ADD (x, y)
+try {
+   __intrinsic EXT ("Buffer")
+} else {
+   extension_available = False
+   array_implementation
+}
+
+```

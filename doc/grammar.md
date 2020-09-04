@@ -1,8 +1,25 @@
+# EZIR Pseudo Grammar
+
+This is a very rough spec for the grammar. It is meant to assist implementation
+and document changes, but not capture every detail. Specifically this parser
+does not capture how whitespace is parsed nor the structure of the AST.
+
+## Whitespace
+
+Whitespace is roughly handled as follows
+ - Parse ";" as an explicit terminator
+ - Parse "\n" as an implicit terminator
+ - Skip implicit terminators if their nearest parent punctuation is "()" or "[]"
+ - Skip implicit terminators in non-ambiguous context
+
+What non-ambiguous contexts are is currently not formally specified.
+
+```
 module
-    = statments { terminator }
+    = statments
 
 statements
-    = { statement { <terminator> statement } }
+    = { statement }
 
 statement
     = declaration
@@ -15,6 +32,9 @@ declaration
     = [ <doc> ] "let" pattern "=" expression
 
 pattern
+    = bindings
+
+bindings
     = binding { "as" binding }
 
 binding
@@ -22,6 +42,7 @@ binding
     | spread_binding
     | list_binding
     | map_binding
+    | box_binding
     | simple_literal
 
 range_binding
@@ -45,6 +66,9 @@ pattern_pairs
 pattern_pair
     = pattern "=" pattern
     | <identifier>
+
+box_binding
+    = "Box" "[" pattern "]"
 
 simple_literal
     = <identifier>
@@ -108,9 +132,10 @@ for_expression
     = "for" pattern "in" primary_expression [ "if" primary_expression ] [ "while" primary_expression ] do_expression
 
 try_expression
-    | "try" block catch finally
-    = "try" block catch
-    | "try" block finally
+    | "try" block [ try_else ] [ catch ] [ finally ]
+
+try_else
+    | "else" block
 
 catch
     = "catch" cases
@@ -178,7 +203,6 @@ unary_operator
     = "not"
     | "+"
     | "-"
-    | "..."
 
 operator_free_expresion
     = simple_expression { call_or_access }
@@ -190,6 +214,9 @@ call_or_access
 call
     = "(" expressions ")"
 
+expressions
+    = [ expression ] { "," expression } [ "," ]
+
 access
     = <symbol>
     | "[" expression "]"
@@ -199,25 +226,41 @@ function
     | "Function" case_block
 
 list_literal
-    = "List" "[" expressions "]"
+    = "List" "[" list_items "]"
 
-expressions
-    = [ expression ] { "," expression } [ "," ]
+list_items
+    = [ list_item ] { "," list_item } [ "," ]
+
+spread_item
+    = "..." operator_free_expression
+
+list_item
+    = spread_item
+    | expression
 
 map_literal
-    = ""Map "[" pairs "]"
+    = ""Map "[" map_items "]"
 
-pairs
-    = [ pair ] { "," pair } [ "," ]
+map_items 
+    = [ map_item ] { "," map_item } [ "," ]
+
+map_item
+    = spread_item
+    | pair
 
 pair
-    = "..." operator_free_expresion
-    | expression "=" expression
+    = expression "=" expression
     | <identifier>
+
+box_literal
+    = "Box" "[" expression "]"
 
 simple_expression
     = "(" expression ")"
     | function
     | list_literal
     | map_literal
+    | box_literal
     | simple_literal
+
+```

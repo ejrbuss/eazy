@@ -1,4 +1,4 @@
-import Config from "./Config.js";
+const Config = require("./Config");
 
 const Style = {
     Default: "",
