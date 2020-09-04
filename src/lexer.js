@@ -7,7 +7,9 @@ const {
     many,
     map,
     must,
+    map_error,
 } = require("./Parsing");
+const { ErrorType } = require("./ErrorHandling");
 
 function map_type(type, parser) {
     return map(function(match, position, stream) {
@@ -131,7 +133,12 @@ const token = choice(
     operator,
 );
 
-const lex = must(all(many(token)));
+const lex = map_error(function(error) {
+    throw new Error({
+        type: ErrorType.UnexpectedCharacters,
+        stream: error.stream,
+    });
+}, must(all(many(token))));
 
 module.exports = {
     lex,
