@@ -465,6 +465,16 @@ test("Parser.MatchExpression", function() {
 
 test("Parser.ForExpression", function() {
     expect(parse(`
+        for Nothing do {}
+    `)).toEqual(
+        { type: NodeType.Module, block: [
+            { type: NodeType.ForExpression, 
+                expression: { type: NodeType.Nothing },
+                block: [],
+            }
+        ] }
+    );
+    expect(parse(`
         for Nothing in Nothing do {}
     `)).toEqual(
         { type: NodeType.Module, block: [

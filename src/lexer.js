@@ -134,12 +134,9 @@ const token = choice(
     operator,
 );
 
-const tokens = map_error(function(error) {
-    throw new Error({
-        type: ErrorType.UnexpectedCharacters,
-        stream: error.stream,
-    });
-}, must(all(many(token))));
+const tokens = must(all(many(token)), {
+    type: ErrorType.UnexpectedCharacters,
+});
 
 function lex(source) {
     return tokens(Stream(source));

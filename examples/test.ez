@@ -1,0 +1,16 @@
+(Nothing)
+
+
+-- let IO = import("core.io")
+
+let list = List [ 1, 2, 3 ]
+
+
+if True then {
+    print(list)
+}
+
+let 10..x = 2
+
+--> Comment
+((((((Nothing))))))

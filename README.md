@@ -1192,8 +1192,6 @@ Source
    -> parser
    -> analysis
       -> scope analysis
-      -> spread analysis (spread operator is only allowed in certain cases)
-      -> match analysis (else needs to be last case)
    -> desugar
       -> desugar if branch
       -> desugar List expressions
@@ -1304,3 +1302,8 @@ try {
 }
 
 ```
+
+
+## Parser rewrite
+
+Get rid of all this speculative parsing and replace it with a lookahead parser.

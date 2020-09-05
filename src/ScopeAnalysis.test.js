@@ -1,5 +1,6 @@
-const Language = require("./language");
 const { scope_analysis } = require("./ScopeAnalysis");
+const Lexer = require("./Lexer");
+const Parser = require("./Parser");
 
 function remove_declaring_nodes(scopes) {
     function remove_declaring_nodes(scope) {
@@ -16,7 +17,7 @@ function remove_declaring_nodes(scopes) {
 
 function expect_analysis(source, no_errors, no_warnings) {
     const analysis = scope_analysis({
-        ast: Language.parse_string(source),
+        ast: Parser.parse(Lexer.lex(source)),
         errors: [],
         warnings: [],
     });
@@ -95,7 +96,7 @@ test("ScopeAnalysis.ErroredDeclarations", function() {
 
 test("ScopeAnalysis.ScopeExample", function() {
     expect(remove_declaring_nodes(scope_analysis({
-        ast: Language.parse_string(`
+        ast: Parser.parse(Lexer.lex(`
             let x = 4
             Function {
                 let y = x
@@ -106,7 +107,7 @@ test("ScopeAnalysis.ScopeExample", function() {
                 print(y)
             }
             print(x)
-        `),
+        `)),
         errors: [],
         warnings: [],
     }).ast.block[1].cases[0].block[1].block[0].scopes)).toEqual({

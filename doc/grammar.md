@@ -116,13 +116,9 @@ match_expression
     = "match" [ primary_expression "with" ] cases
 
 cases
-    = "{" [ case ] { "," case } [ "," ] "}"
+    = "{" [ case ] { "," case } [ "," ] [ else_case "," ] "}"
 
 case
-    = primary_case
-    | else_case
-
-primary_case
     = patterns [ "if" expression ] "=>" statement
 
 else_case

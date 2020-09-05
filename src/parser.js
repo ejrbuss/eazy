@@ -17,9 +17,10 @@ const {
     map_to,
     map_to_nth,
     map_into,
-    map_error,
     named_sequence,
     map_ctx_to,
+    separate,
+    many1,
 } = require("./Parsing");
 const { ErrorType } = require("./ErrorHandling");
 
@@ -61,6 +62,20 @@ function map_ctx_skip_implicit_terminators(parser) {
 
 function map_ctx_reset(parser) {
     return map_ctx_to({}, parser);
+}
+
+function must_token_with_value(value) {
+    return must(token_with_value(value), {
+        type: ErrorType.ExpectedToken,
+        expected_value: value,
+    });
+}
+
+function must_token_of_type(type) {
+    return must(token_of_type(type), {
+        type: ErrorType.ExpectedToken,
+        expected_type: type,
+    });
 }
 
 function map_binary_builtin(parser) {
@@ -120,8 +135,8 @@ const box_literal = lazy(function() {
     return map_into({ type: NodeType.BoxExpression }, named_sequence(
         token_with_value("Box"),
         token_with_value("["),
-        "value", must(expression),
-        must(token_with_value("]")),
+        "value", must(expression, { error: ErrorType.ExpectedProduction, production: "expression" }),
+        must_token_with_value("]"),
     ));
 });
 
@@ -129,7 +144,7 @@ const spread_item = lazy(function() {
     return map_into({ type: NodeType.Spread },
         named_sequence(
             token_with_value("..."),
-            "value", must(operator_free_expression),
+            "value", must(operator_free_expression, { error: ErrorType.ExpectedProduction, production: "expression" }),
         )
     );
 });
@@ -140,7 +155,7 @@ const pair = lazy(function() {
             named_sequence(
                 "key", expression,
                 token_with_value("="),
-                "value", must(expression),
+                "value", must(expression, { error: ErrorType.ExpectedProduction, production: "expression" }),
             ),
             named_sequence(
                 "value", token_of_type(NodeType.Identifier)
@@ -160,8 +175,8 @@ const map_literal = map_into({ type: NodeType.MapExpression },
     named_sequence(
         token_with_value("Map"),
         token_with_value("["),
-        "pairs", must(map_items),
-        must(token_with_value("]")),
+        "pairs", must(map_items, { type: ErrorType.ExpectedProduction, production: "map elements" }),
+        must_token_with_value("]"),
     ),
 );
 
@@ -178,8 +193,8 @@ const list_literal = map_into({ type: NodeType.ListExpression },
     named_sequence(
         token_with_value("List"),
         token_with_value("["),
-        "items", must(list_items),
-        must(token_with_value("]")),
+        "items", must(list_items, { type: ErrorType.ExpectedProduction, production: "list elements" }),
+        must_token_with_value("]"),
     ),
 );
 
@@ -198,8 +213,8 @@ const simple_expression = lazy(function() {
         map_to_nth(1,
             sequence(
                 token_with_value("("),
-                expression,
-                token_with_value(")"),
+                must(expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
+                must_token_with_value(")"),
             ),
         ),
         function_,
@@ -268,7 +283,7 @@ const unary_expression = choice(
     map_into({ type: NodeType.Builtin },
         named_sequence(
             "builtin", unary_operator,
-            "arguments",  map_into([], must(operator_free_expression)),
+            "arguments",  map_into([], must(operator_free_expression, { type: ErrorType.ExpectedProduction, production: "expression" })),
         ),
     ),
     operator_free_expression,
@@ -359,11 +374,11 @@ const case_block = lazy(function() {
                     "condition", maybe(map_to_nth(1,
                         sequence(
                             token_with_value("if"),
-                            must(primary_expression),
+                            must(primary_expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
                         ),
                     )),
                     token_with_value("->"),
-                    "block", must(statements),
+                    "block", must(statements, { type: ErrorType.ExpectedProduction, production: "statement" }),
                 ),
             ),
             named_sequence(
@@ -378,7 +393,7 @@ const try_else = lazy(function() {
     return map_to_nth(1,
         sequence(
             token_with_value("else"),
-            must(block),
+            must(block, { type: ErrorType.ExpectedProduction, production: "block" }),
         )  
     );
 });
@@ -387,7 +402,7 @@ const finally_ = lazy(function() {
     return map_to_nth(1,
         sequence(
             token_with_value("finally"),
-            must(block),
+            must(block, { type: ErrorType.ExpectedProduction, production: "block" }),
         ),
     );
 });
@@ -399,7 +414,7 @@ const catch_ = lazy(function() {
             must(choice(
                 cases,
                 case_block,
-            ))
+            ), { type: ErrorType.ExpectedProduction, production: "pattern match case" })
         ),
     );
 });
@@ -418,23 +433,25 @@ const for_expression = lazy(function() {
     return map_into({ type: NodeType.ForExpression }, 
         named_sequence(
             token_with_value("for"),
-            "pattern", must(pattern),
-            must(token_with_value("in")),
-            "expression", must(primary_expression),
+            "pattern", maybe(map_to_nth(0, sequence(
+                pattern,
+                token_with_value("in"),
+            ))),
+            "expression", must(primary_expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
             "if_condition", maybe(map_to_nth(1,
                 sequence(
                     token_with_value("if"),
-                    must(primary_expression),
+                    must(primary_expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
                 ),
             )),
             "while_condition", maybe(map_to_nth(1,
                 sequence(
                     token_with_value("while"),
-                    must(primary_expression),
+                    must(primary_expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
                 ),
             )),
-            must(token_with_value("do")),
-            "block", must(block),
+            must_token_with_value("do"),
+            "block", must(block, { type: ErrorType.ExpectedProduction, production: "block" }),
         ),
     );
 });
@@ -443,36 +460,44 @@ const else_case = lazy(function() {
     return map_into({ type: NodeType.ElseCase },
         named_sequence(
             token_with_value("else"),
-            must(token_with_value("=>")),
-            "block", sequence(must(statement)),
+            must_token_with_value("=>"),
+            "block", sequence(must(statement, { type: ErrorType.ExpectedProduction, production: "statement" })),
         ),
     );
 });
 
-const primary_case = lazy(function() {
+const case_ = lazy(function() {
     return map_into({ type: NodeType.Case },
         named_sequence(
             "patterns", patterns,
             "condition", maybe(map_to_nth(1,
                 sequence(
                     token_with_value("if"),
-                    must(expression),
+                    must(expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
             ))),
             token_with_value("=>"),
-            "block", must(sequence(statement)),
+            "block", must(sequence(statement), { type: ErrorType.ExpectedProduction, production: "statement" }),
         ),
     );
 });
 
-const case_ = choice(
-    primary_case,
-    else_case,
-);
-
 const cases = within_brackets(
-    map_to_nth(0, alternate(
-        case_,
-        token_with_value(","),
+    map(function(result) {
+        const [ cases, else_case ] = result;
+        if (else_case) {
+            cases.push(else_case);
+        }
+        return cases;
+    }, sequence(
+        map_to_nth(0, separate(
+            case_,
+            token_with_value(","),
+        )),
+        maybe(map_to_nth(1, sequence(
+            token_with_value(","),
+            else_case,
+        ))),
+        maybe(token_with_value(",")),
     )),
 );
 
@@ -484,9 +509,9 @@ const match_expression = map_into({ type: NodeType.MatchExpression },
         ),
         named_sequence(
             token_with_value("match"),
-            "expression", must(primary_expression),
-            must(token_with_value("with")),
-            "cases", must(cases),
+            "expression", must(primary_expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
+            must_token_with_value("with"),
+            "cases", must(cases, { type: ErrorType.ExpectedProduction, production: "pattern match case" }),
         )
     ),
 );
@@ -494,16 +519,16 @@ const match_expression = map_into({ type: NodeType.MatchExpression },
 const while_expression = map_into({ type: NodeType.WhileExpression },
     named_sequence(
         token_with_value("while"),
-        "condition", must(primary_expression), 
+        "condition", must(primary_expression, { type: ErrorType.ExpectedProduction, production: "expression" }), 
         must(token_with_value("do")),
-        "block", must(block),
+        "block", must(block, { type: ErrorType.ExpectedProduction, production: "block" }),
     ),
 );
 
 const do_expression = map_into({ type: NodeType.DoExpression }, 
     named_sequence(
         token_with_value("do"),
-        "block", must(block),
+        "block", must(block, { type: ErrorType.ExpectedProduction, production: "block" }),
     ),
 );
 
@@ -517,13 +542,13 @@ const if_continuation = lazy(function() {
 const if_expression = map_into({ type: NodeType.IfExpression }, 
     named_sequence(
         token_with_value("if"),
-        "condition", must(primary_expression),
-        must(token_with_value("then")),
-        "then_block", must(block),
+        "condition", must(primary_expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
+        must_token_with_value("then"),
+        "then_block", must(block, { type: ErrorType.ExpectedProduction, production: "block" }),
         "else_block", maybe(map_to_nth(1,
             sequence(
                 token_with_value("else"),
-                must(if_continuation),
+                must(if_continuation, { type: ErrorType.ExpectedProduction, production: "block or if expression" }),
             ),
         )),
     ),
@@ -550,21 +575,21 @@ const assignment = map_into({ type: NodeType.Assignment },
         "target", token_of_type(NodeType.Identifier),
         "accesses", many(access),
         token_with_value("="),
-        "expression", must(expression),
+        "expression", must(expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
     ),
 );
 
 const throw_statement = map_into({ type: NodeType.Throw },
     named_sequence(
         token_with_value("throw"),
-        "expression", must(expression),
+        "expression", must(expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
     ),
 );
 
 const return_statement = map_into({ type: NodeType.Return }, 
     named_sequence(
         token_with_value("return"),
-        "expression", must(expression),
+        "expression", must(expression, { type: ErrorType.ExpectedProduction, production: "expression" }),
     ),
 );
 
@@ -574,7 +599,7 @@ const pattern_pair = lazy(function() {
             named_sequence(
                 "key", pattern,
                 token_with_value("="),
-                "value", must(pattern),
+                "value", must(pattern, { type: ErrorType.ExpectedProduction, production: "pattern" }),
             ),
             named_sequence(
                 "value", token_of_type(NodeType.Identifier),
@@ -593,9 +618,9 @@ const pattern_pairs = map_to_nth(0,
 const map_binding = map_into({ type: NodeType.MapExpression }, 
     named_sequence(
         token_with_value("Map"),
-        must(token_with_value("[")),
-        "pairs", must(pattern_pairs),
-        must(token_with_value("]")),
+        must_token_with_value("["),
+        "pairs", must(pattern_pairs, { type: ErrorType.ExpectedProduction, production: "pattern" }),
+        must_token_with_value("]"),
     ),
 );
 
@@ -612,9 +637,9 @@ const box_binding = lazy(function() {
     return map_into({ type: NodeType.BoxExpression },
         named_sequence(
             token_with_value("Box"),
-            must(token_with_value("[")),
-            "value", must(pattern),
-            must(token_with_value("]")),
+            must_token_with_value("["),
+            "value", must(pattern, { type: ErrorType.ExpectedProduction, production: "pattern" }),
+            must_token_with_value("]"),
         )
     );
 });
@@ -622,9 +647,9 @@ const box_binding = lazy(function() {
 const list_binding = map_into({ type: NodeType.ListExpression },
     named_sequence(
         token_with_value("List"),
-        must(token_with_value("[")),
-        "items", must(patterns),
-        must(token_with_value("]")),
+        must_token_with_value("["),
+        "items", must(patterns, { type: ErrorType.ExpectedProduction, production: "items" }),
+        must_token_with_value("]"),
     ),
 );
 
@@ -638,7 +663,7 @@ const spread_binding = map_into({ type: NodeType.Spread },
 const range_binding = map_binary_builtin(sequence(
     token_of_type(NodeType.Number),
     map_to(Builtin.Range, token_with_value("..")),
-    must(token_of_type(NodeType.Number)),
+    must_token_of_type(NodeType.Number),
 ));
 
 const binding = choice(
@@ -666,8 +691,8 @@ const declaration = map_into({ type: NodeType.Declaration },
         named_sequence(
             "doc", maybe(token_of_type(NodeType.Doc)),
             token_with_value("let"),
-            "pattern", must(pattern),
-            must(token_with_value("=")),
+            "pattern", must(pattern, { type: ErrorType.ExpectedProduction, production: "pattern" }),
+            must_token_with_value("="),
             "expression", must(expression),
         ),
     ),
@@ -683,7 +708,7 @@ const statement = choice(
 
 const statements = map_ctx_reset(map_to_nth(1, sequence(
     many(terminator),
-    map_to_nth(0, alternate(statement, terminator)),
+    map_to_nth(0, alternate(statement, many1(terminator))),
 )));
 
 const module_ = must(all(map_into({ type: NodeType.Module }, 
@@ -692,7 +717,7 @@ const module_ = must(all(map_into({ type: NodeType.Module },
         "block", statements,
         many(terminator),
     ),
-)));
+)), { type: ErrorType.UnexpectedToken });
 
 function filter_tokens(tokens) {
     const filtered_tokens = [];
@@ -730,18 +755,22 @@ function check_seperators(tokens) {
         }
         if (seperators.closers.includes(token.value)) {
             if (seperator_stack.length === 0) {
-                throw new Error({
+                const error = new Error();
+                Object.assign(error, {
                     type: ErrorType.UnmatchedSeperators,
                     closing: token,
-                });
+                })
+                throw error;
             }
             const opening = seperator_stack.pop();
             if (matching_pair[opening.value] !== token.value) {
-                throw new Error({
+                const error = new Error();
+                Object.assign(error, {
                     type: ErrorType.UnmatchedSeperators,
                     opening,
                     closing: token,
-                });
+                })
+                throw error;
             }
             filtered_tokens.push(token);
             continue;
@@ -763,14 +792,7 @@ function parse(tokens) {
     // Cleanup tokens
     tokens = filter_tokens(tokens);
     tokens = check_seperators(tokens);
-    return map_error(function(error) {
-        throw new Error({
-            type: ErrorType.UnexpectedToken,
-            stream: error.stream,
-            ctx: error.ctx,
-        });
-        throw error;
-    }, module_)(Stream(tokens), {});
+    return module_(Stream(tokens), {});
 }
 
 module.exports = { 
