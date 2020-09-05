@@ -1,16 +1,19 @@
 (Nothing)
 
-
--- let IO = import("core.io")
+let IO = import("core.io")
 
 let list = List [ 1, 2, 3 ]
 
+print(x)
+
+let x = Nothing
+let x = 5
 
 if True then {
-    print(list)
+    IO.write(list)
 }
 
-let 10..x = 2
+let 1..10 = 2
 
 --> Comment
 ((((((Nothing))))))

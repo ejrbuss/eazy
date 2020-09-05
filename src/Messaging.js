@@ -71,8 +71,9 @@ function format_status(status, text) {
 
 function format_inverted_status(status, text=status.name) {
     return with_styles(" " + text + " ", 
-        Background[status.color], 
-        Foreground.Black,
+        Foreground[status.color], 
+        Style.Bright,
+        Style.Reverse,
     );
 }
 

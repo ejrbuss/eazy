@@ -1,4 +1,4 @@
-const { Status, format_message } = require("./Messaging");
+const { Status, format_message, format_inverted_status, format_bold_status } = require("./Messaging");
 
 const ErrorType = {
     // Lexing
@@ -12,9 +12,9 @@ const ErrorType = {
 
     // Scope analysis
     Redeclared: "Redeclared",
-    RedeclaredBuiltin: "RedeclaredBuiltin",
     Undeclared: "Undeclared",
     UsedBeforeDeclared: "UsedBeforeDeclared",
+    RedeclaredBuiltin: "RedeclaredBuiltin",
     AssignedToBuiltin: "AssignedToBuiltin",
 };
 
@@ -23,7 +23,7 @@ const WarningType = {
     Unused: "Unused",
 
     // Dead code analysis
-    DeadCCode: "DeadCode",
+    DeadCode: "DeadCode",
 
     // Pattern analsysis
     NeverMatch: "NeverMatch",
@@ -74,7 +74,7 @@ const formatters = {
                         position: error.opening.position, 
                         length: 1,
                         annotation: "I found an opening " + seperator_name + " here",
-                        status: Status.Info,
+                        status: Status.Error,
                     },
                     {
                         file,
@@ -165,6 +165,149 @@ const formatters = {
                 }
             ],
         });
+    },
+
+    [ErrorType.Redeclared]: function(file, source, error) {
+        const original_declaration = error.declaration.declaring_node;
+        return format_message({
+            status: Status.Error,
+            title: "Redeclared Varaible:",
+            subtitle: "Variable declared more than once!",
+            code_spans: [
+                {
+                    file,
+                    source,
+                    position: original_declaration.position,
+                    length: original_declaration.length,
+                    prologue: "You declared the variable `" + original_declaration.value + "` " + (error.declaration.redeclarations.length + 1) + " times.",
+                    annotation: "Here was the first declaration",
+                    status: Status.Error,
+                },
+                ...error.declaration.redeclarations.map(function(redeclaration) {
+                    return {
+                        file,
+                        source,
+                        position: redeclaration.position,
+                        length: redeclaration.length,
+                        annotation: "Here is another declaration",
+                        status: Status.Error,
+                    };
+                }),
+            ]
+        });
+    },
+
+    [ErrorType.Undeclared]: function(file, source, error) {
+        const token = error.node;
+        return format_message({
+            status: Status.Error,
+            title: "Undeclared Variable:",
+            subtitle: "Variable used without beind declared",
+            code_spans: [
+                {
+                    file,
+                    source,
+                    position: token.position,
+                    length: token.length,
+                    prologue: "You used the variable `" + token.value + "`, but it was never declared",
+                    annotation: "Variable used here",
+                    epilogue: "You can declare a variable using `let`. For example `let " + token.value + " = Nothing`.",
+                    status: Status.Error,
+                },
+            ],
+        });
+    },
+
+    [ErrorType.UsedBeforeDeclared]: function(file, source, error) {
+        const declaration = error.declaration.declaring_node;
+        const usage = error.node;
+        return format_message({
+            status: Status.Error,
+            title: "Used Before Declared",
+            subtitle: "Variable used before its declaration",
+            code_spans: [
+                {
+                    file,
+                    source,
+                    position: usage.position,
+                    length: usage.length,
+                    prologue: "You used `" + usage.value + "` before declaring it",
+                    annotation: "Here is the usage",
+                    status: Status.Error,
+                },
+                {
+                    file,
+                    source,
+                    position: declaration.position,
+                    length: declaration.length,
+                    prologue: "You declare `" + usage.value + "` later in the file",
+                    annotation: "Here is the declaration",
+                    status: Status.Error,
+                },
+            ],
+        });
+    },
+
+    [ErrorType.RedeclaredBuiltin]: function(file, source, error) {
+        const token = error.declaration.declaring_node;
+        return format_message({
+            status: Status.Error,
+            title: "Redeclared Builtin:",
+            subtitle: "Builtin redeclared!",
+            code_spans: [
+                {
+                    file,
+                    source,
+                    position: token.position,
+                    length: token.length,
+                    prologue: "You redeclared the builtin `" + token.value + "`",
+                    annotation: "Here is the redeclaration",
+                    epilogue: "You cannod declare a variable with the same name as a builtin. Try using a different name, such as `" + token.value + "_`.",
+                    status: Status.Error,
+                }
+            ],
+        });
+    },
+
+    [ErrorType.AssignedToBuiltin]: function(file, source, error) {
+        const token = error.node;
+        return format_message({
+            status: Status.Error,
+            title: "Assigned Builtin:",
+            subtitle: "Builtin assigned a value!",
+            code_spans: [
+                {
+                    file,
+                    source,
+                    position: token.position,
+                    length: token.length,
+                    prologue: "You assigned a value to the builtin `" + token.value + "`",
+                    annotation: "Here is the assignment",
+                    epilogue: "You cannot assign to a builtin. They are constant.",
+                    status: Status.Error,
+                }
+            ],
+        });
+    },
+
+    [WarningType.Unused]: function(file, source, warning) {
+        const token = warning.declaration.declaring_node;
+        return format_message({
+            status: Status.Warn,
+            title: "Unused Variable:",
+            subtitle: "Variable declared but never used!",
+            code_spans: [
+                {
+                    file,
+                    source,
+                    position: token.position,
+                    length: token.length,
+                    prologue: "You declared the variable `" + token.value + "`, but never used it",
+                    annotation: "Here is the declaration",
+                    status: Status.Warn,
+                },
+            ],
+        })
     },
 
 };

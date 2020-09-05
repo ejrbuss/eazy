@@ -8,7 +8,6 @@ const {
     many,
     map,
     must,
-    map_error,
 } = require("./Parsing");
 const { ErrorType } = require("./ErrorHandling");
 

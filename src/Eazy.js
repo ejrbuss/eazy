@@ -47,6 +47,7 @@ function cli(args) {
     console.log(format_bold_status(Status.Error, "Errors: ") + errors.length);
     console.log(format_bold_status(Status.Warn, "Warnings: ") + warnings.length);
     console.log(format_bold_status(Status.Info, "Time: " ) + (end - start) + " (ms)");
+    console.log();
 }
 
 if (require.main === module) {

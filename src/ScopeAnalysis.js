@@ -1,5 +1,4 @@
-const Analysis = require("./Analysis");
-const { NodeType } = require("./Node");
+const { NodeType, DefaultVisitor, visit, visit_children } = require("./Node");
 const { Builtins } = require("./Constants");
 const { ErrorType, WarningType } = require("./ErrorHandling");
 
@@ -104,7 +103,7 @@ const OpensInnerScopeTypes = [
 
 const create_scope_visitors = {
 
-    [Analysis.DefaultVisitor]: function(node, ctx) {
+    [DefaultVisitor]: function(node, ctx) {
         if (OpensLocalScopeTypes.includes(node.type)) {
             ctx.unvisited_node_ctx_thunk_pairs.push([node, function() {
                 return { ...ctx, scopes: open_local_scope(ctx.scopes) };
@@ -118,38 +117,40 @@ const create_scope_visitors = {
             return;
         }
         node.scopes = ctx.scopes;
-        Analysis.visit_children(create_scope_visitors, node, ctx);
+        visit_children(create_scope_visitors, node, ctx);
     },
 
     [NodeType.Module]: function(node, ctx) {
         node.scopes = ctx.scopes;
-        Analysis.visit_children(create_scope_visitors, node, ctx);
+        visit_children(create_scope_visitors, node, ctx);
         while (ctx.unvisited_node_ctx_thunk_pairs.length > 0) {
             const [ unvisited_node, unvisited_ctx_thunk ] = ctx.unvisited_node_ctx_thunk_pairs.pop();
             const unvisited_ctx = unvisited_ctx_thunk();
             unvisited_node.scopes = unvisited_ctx.scopes;
-            Analysis.visit_children(create_scope_visitors, unvisited_node, unvisited_ctx);
+            visit_children.debug = true;
+            visit_children(create_scope_visitors, unvisited_node, unvisited_ctx);
         }
     },
 
     [NodeType.Pattern]: function(node, ctx) {
         node.scopes = ctx.scopes;
         const declaration_ctx = { ...ctx, in_declaration: true };
-        Analysis.visit_children(create_scope_visitors, node, declaration_ctx);
+        visit_children(create_scope_visitors, node, declaration_ctx);
     },
 
     [NodeType.Assignment]: function(node, ctx) {
         node.scopes = ctx.scopes;
         if (node.accesses.length === 0) {
             const assignment_ctx = { ...ctx, in_assignment: true };
-            Analysis.visit_node(create_scope_visitors, node.target, assignment_ctx);
-            Analysis.visit_node(create_scope_visitors, node.expression, ctx);
+            visit(create_scope_visitors, node.target, assignment_ctx);
+            visit(create_scope_visitors, node.expression, ctx);
             return;
         }
-        Analysis.visit_children(create_scope_visitors, node, ctx);
+        visit_children(create_scope_visitors, node, ctx);
     },
 
     [NodeType.Identifier]: function(node, ctx) {
+        // console.log("seeing ident: " + node.value);
         node.scopes = ctx.scopes;
         if (ctx.in_declaration) {
             declare_in_local_scope(node);
@@ -217,7 +218,8 @@ function check_usage(node, ctx) {
         return;
     }
 
-    if (declaration === undefined) {
+    if (declaration === undefined && !ctx.undeclared.includes(name)) {
+        ctx.undeclared.push(name);
         ctx.errors.push({
             type: ErrorType.Undeclared,
             node,
@@ -240,25 +242,21 @@ function check_usage(node, ctx) {
 }
 
 const check_scope_visitors = {
-    
-    [Analysis.DefaultVisitor]: function(node, ctx) {
-        Analysis.visit_children(check_scope_visitors, node, ctx);
-    },
 
     [NodeType.Pattern]: function(node, ctx) {
         const declaration_ctx = { ...ctx, in_declaration: true };
-        Analysis.visit_children(check_scope_visitors, node, declaration_ctx);
+        visit_children(check_scope_visitors, node, declaration_ctx);
     },
 
     [NodeType.Assignment]: function(node, ctx) {
         node.scopes = ctx.scopes;
         if (node.accesses.length === 0) {
             const assignment_ctx = { ...ctx, in_assignment: true };
-            Analysis.visit_node(check_scope_visitors, node.target, assignment_ctx);
-            Analysis.visit_node(check_scope_visitors, node.expression, ctx);
+            visit(check_scope_visitors, node.target, assignment_ctx);
+            visit(check_scope_visitors, node.expression, ctx);
             return;
         }
-        Analysis.visit_children(check_scope_visitors, node, ctx);
+        visit_children(check_scope_visitors, node, ctx);
     },
 
     [NodeType.Identifier]: function(node, ctx) {
@@ -277,7 +275,7 @@ const check_scope_visitors = {
 
 function scope_analysis(analysis_ctx) {
     const { ast, errors, warnings } = analysis_ctx;
-    Analysis.visit_node(create_scope_visitors, ast, {
+    visit(create_scope_visitors, ast, {
         unvisited_node_ctx_thunk_pairs: [],
         in_declaration: false,
         in_assignment: false,
@@ -289,9 +287,10 @@ function scope_analysis(analysis_ctx) {
         errors,
         warnings,
     });
-    Analysis.visit_node(check_scope_visitors, ast, {
+    visit(check_scope_visitors, ast, {
         in_declaration: false,
         in_assignment: false,
+        undeclared: [],
         errors,
         warnings,
     });
@@ -301,4 +300,4 @@ function scope_analysis(analysis_ctx) {
 module.exports = {
     get_declaration,
     scope_analysis,
-}
+};

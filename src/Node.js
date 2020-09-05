@@ -43,6 +43,7 @@ const NodeType = {
 
     // Expression
     Call: "Call",
+    Access: "Access",
     Builtin: "Builtin",
     ListExpression: "ListExpression",           // Eliminated
     MapExpression: "MapExpression",             // Eliminated
@@ -105,6 +106,9 @@ const Builtin = {
     Trace: "Trace",
 };
 
+const DefaultVisitor = "DefaultVisitor";
+const DefaultTransformer = "DefaultTransformer";
+
 function is_node(node) {
     return typeof node === "object"
         && !Array.isArray(node)
@@ -117,25 +121,26 @@ function is_token(node) {
 }
 
 function visit(visitors, node, ctx) {
-    const visitor = visitors[node.type];
+    const visitor = visitors[node.type] || visitors[DefaultVisitor];
     if (typeof visitor === "function") {
         visitor(node, ctx);
     } else {
-        visit_children(transformers, nnode, ctx);
+        visit_children(visitors, node, ctx);
     }
 }
 
 function visit_children(visitors, node, ctx) {
-    const keys = Object.kets(node);
+    let debug;
+    const keys = Object.keys(node);
     for (const key of keys) {
         const sub_node = node[key];
-
         if (is_node(sub_node)) {
             visit(visitors, sub_node, ctx);
-
-        } else if (Array.isArray(sub_node)) {
+            continue;
+        } 
+        if (Array.isArray(sub_node)) {
             for (const sub_sub_node of sub_node) {
-                if (is_nnode(sub_sub_node)) {
+                if (is_node(sub_sub_node)) {
                     visit(visitors, sub_sub_node, ctx);
                 }
             }
@@ -144,7 +149,7 @@ function visit_children(visitors, node, ctx) {
 }
 
 function transform(transformers, node, ctx) {
-    const transformer = transformers[node.type];
+    const transformer = transformers[node.type] || transformers[DefaultTransformer];
     if (typeof transformer === "function") {
         return transformer(node, ctx);
     } else {
@@ -164,7 +169,7 @@ function transform_children(transformers, node, ctx) {
         } else if (Array.isArray(sub_node)) {
             const transformed_sub_node = [];
             for (const sub_sub_node of sub_node) {
-                if (is_nnode(sub_sub_node)) {
+                if (is_node(sub_sub_node)) {
                     transformed_sub_node.push(transform(transformers, sub_sub_node, ctx));
                 } else {
                     transformed_sub_node.push(sub_sub_node);
@@ -180,6 +185,8 @@ module.exports = {
     TokenType,
     NodeType,
     Builtin,
+    DefaultVisitor,
+    DefaultTransformer,
     is_node,
     is_token,
     visit,
