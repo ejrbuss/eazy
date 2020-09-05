@@ -1,22 +1,16 @@
 const Lexer = require("./Lexer");
 const Parser = require("./Parser");
-const { Stream } = require("./Parsing");
-const { NodeType, Builtin } = require("./Node");
+const { NodeType, Builtin, visit_all } = require("./Node");
 
 function parse(source) {
     return discard_position(Parser.parse(Lexer.lex(source)));
 }
 
 function discard_position(ast) {
-    if (typeof ast === "object") {
-        if (!(ast instanceof Array)) {
-            delete ast.position;
-            delete ast.length;
-        }
-        for (const key of Object.keys(ast)) {
-            discard_position(ast[key]);
-        }
-    }
+    visit_all(function(node) {
+        delete node.position;
+        delete node.length; 
+    }, ast);
     return ast;
 }
 

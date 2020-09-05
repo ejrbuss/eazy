@@ -148,6 +148,14 @@ function visit_children(visitors, node, ctx) {
     }
 }
 
+function visit_all(visitor, node, ctx) {
+    const visitors = { [DefaultVisitor]: function(node, ctx) {
+        visitor(node, ctx);
+        return visit_children(visitors, node, ctx);
+    } };
+    visit(visitors, node, ctx);
+}
+
 function transform(transformers, node, ctx) {
     const transformer = transformers[node.type] || transformers[DefaultTransformer];
     if (typeof transformer === "function") {
@@ -191,6 +199,7 @@ module.exports = {
     is_token,
     visit,
     visit_children,
+    visit_all,
     transform,
     transform_children,
 };
