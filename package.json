@@ -23,6 +23,6 @@
   "devDependencies": {
     "benchmark": "^2.1.4",
     "jest": "^26.1.0",
-    "next": "^9.5.2"
+    "next": "^11.1.0"
   }
 }
